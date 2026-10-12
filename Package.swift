@@ -6,9 +6,11 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [
         .library(name: "LinkwayCore", targets: ["LinkwayCore"]),
+        .executable(name: "Linkway", targets: ["Linkway"]),
     ],
     targets: [
         .target(name: "LinkwayCore"),
+        .executableTarget(name: "Linkway", dependencies: ["LinkwayCore"]),
         .testTarget(name: "LinkwayCoreTests", dependencies: ["LinkwayCore"]),
     ],
     swiftLanguageModes: [.v6]
