@@ -8,12 +8,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         registry: DestinationRegistry(),
         store: ConfigurationStore(fileURL: ConfigurationStore.defaultFileURL)
     )
+    private var statusMenu: StatusMenu?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         ingress.install()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        statusMenu = StatusMenu(ingress: ingress)
         router.onConfigurationLoaded = { [ingress, router] configuration in
             ingress.forcePickerModifier = configuration.forcePickerModifier.eventFlag
             ingress.onLink = { link in router.handle(link) }
