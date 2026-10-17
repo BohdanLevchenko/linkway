@@ -9,17 +9,53 @@ private func link(_ value: String) throws -> IncomingLink {
     IncomingLink(url: try #require(URL(string: value)), receivedAt: Date(), senderBundleID: nil, forcePicker: false)
 }
 
-@Test func rememberTargetPerLinkKind() throws {
-    #expect(RuleSuggestion.rememberTarget(for: try link("https://www.GitHub.com/a/b")) ==
-        RememberTarget(label: "github.com", condition: .hostIncludingSubdomains("github.com")))
-    #expect(RuleSuggestion.rememberTarget(for: try link("mailto:Ann%20<ann@Acme.com>,bob@other.org")) ==
-        RememberTarget(label: "mail to acme.com", condition: .mailRecipientDomain("acme.com")))
-    #expect(RuleSuggestion.rememberTarget(for: try link("mailto:?subject=hi")) == nil)
-    #expect(RuleSuggestion.rememberTarget(for: try link("file:///tmp/a.html")) == nil)
+@Test func rememberTargetsPerLinkKind() throws {
+    #expect(RuleSuggestion.rememberTargets(for: try link("https://www.GitHub.com/antiwork/gumroad/pulls?q=1")) == [
+        RememberTarget(label: "github.com", condition: .hostIncludingSubdomains("github.com")),
+        RememberTarget(label: "github.com/antiwork", condition: .sitePath(host: "github.com", pathPrefix: "/antiwork")),
+        RememberTarget(label: "github.com/antiwork/gumroad", condition: .sitePath(host: "github.com", pathPrefix: "/antiwork/gumroad")),
+    ])
+    #expect(RuleSuggestion.rememberTargets(for: try link("https://example.com/")).count == 1)
+    #expect(RuleSuggestion.rememberTargets(for: try link("mailto:Ann%20<ann@Acme.com>,bob@other.org")) ==
+        [RememberTarget(label: "mail to acme.com", condition: .mailRecipientDomain("acme.com"))])
+    #expect(RuleSuggestion.rememberTargets(for: try link("mailto:?subject=hi")).isEmpty)
+    #expect(RuleSuggestion.rememberTargets(for: try link("file:///tmp/a.html")).isEmpty)
+}
+
+@Test func sitePathMatchesAtSegmentBoundary() throws {
+    let condition = RuleCondition.sitePath(host: "github.com", pathPrefix: "/spf13")
+    for value in ["https://github.com/spf13", "https://www.github.com/spf13/cobra", "http://github.com/spf13/"] {
+        #expect(URLMatcher.matches(condition, link: try link(value), url: try link(value).url), "\(value)")
+    }
+    for value in ["https://github.com/spf13x", "https://gist.github.com/spf13", "https://github.com/", "mailto:spf13@github.com"] {
+        #expect(!URLMatcher.matches(condition, link: try link(value), url: try link(value).url), "\(value)")
+    }
+}
+
+@Test func narrowerRememberedPathsWin() throws {
+    let brave = DestinationID(bundleID: "com.brave.Browser")
+    func targets(_ value: String) throws -> [RememberTarget] { RuleSuggestion.rememberTargets(for: try link(value)) }
+    var configuration = LinkwayConfiguration(rules: [Rule(name: "manual", condition: .hostExact("github.com"), action: .showPicker)])
+    configuration.remember(try targets("https://github.com/antiwork/x")[1], destination: firefox, privateWindow: false)
+    configuration.remember(try targets("https://github.com/spf13")[1], destination: brave, privateWindow: false)
+    configuration.remember(try targets("https://github.com/")[0], destination: chrome, privateWindow: false)
+    #expect(configuration.rules.map(\.name) == ["github.com/spf13", "github.com/antiwork", "github.com", "manual"])
+
+    let engine = RoutingEngine(rules: configuration.rules, fallbacks: configuration.fallbacks)
+    let available: Set = [chrome, firefox, brave]
+    for (value, expected) in [("https://github.com/antiwork/gumroad", firefox), ("https://github.com/spf13/viper", brave),
+                              ("https://github.com/apple/swift", chrome)] {
+        let input = try link(value)
+        guard case .launch(let request, _) = engine.decide(input, processedURL: input.url, availableDestinations: available) else {
+            Issue.record("expected launch for \(value)")
+            continue
+        }
+        #expect(request.destination == expected, "\(value)")
+    }
 }
 
 @Test func rememberReplacesSameConditionAndGoesFirst() throws {
-    let target = try #require(RuleSuggestion.rememberTarget(for: try link("https://github.com/x")))
+    let target = try #require(RuleSuggestion.rememberTargets(for: try link("https://github.com/x")).first)
     var configuration = LinkwayConfiguration(rules: [
         Rule(name: "broad", condition: .urlPrefix("https://github.com"), action: .showPicker),
         Rule(name: "old", condition: .hostIncludingSubdomains("github.com"), action: .open(firefox, privateWindow: false)),

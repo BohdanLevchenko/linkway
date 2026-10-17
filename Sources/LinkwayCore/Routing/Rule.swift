@@ -50,6 +50,8 @@ public enum RuleCondition: Codable, Sendable, Hashable {
     case hostIncludingSubdomains(String)
     case urlPrefix(String)
     case pathPattern(host: String?, pattern: String)
+    /// Host with or without `www.`, and a path equal to `pathPrefix` or below it at a `/` boundary.
+    case sitePath(host: String, pathPrefix: String)
     case sourceApp(bundleID: String)
     case mailRecipientDomain(String)
 }

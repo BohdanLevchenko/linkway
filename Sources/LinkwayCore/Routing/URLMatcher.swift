@@ -32,6 +32,11 @@ public enum URLMatcher {
             let matched = isWeb && (host.map { hostMatches($0, components: components, subdomains: false) } ?? true)
                 && glob(pattern: normalizePercent(pattern), path: path)
             return (matched, "path \(path) \(matched ? "matches" : "does not match") \(pattern)")
+        case .sitePath(let host, let pathPrefix):
+            let path = normalizePercent(components?.percentEncodedPath ?? "")
+            let matched = isWeb && siteHostMatches(host, components: components)
+                && pathIsWithin(path, prefix: normalizePercent(pathPrefix))
+            return (matched, "\(components?.host ?? "(none)")\(path) \(matched ? "is" : "is not") within \(host)\(pathPrefix)")
         case .sourceApp(let bundleID):
             /// Sender bundle identifiers compare case-insensitively for every link kind; an unknown sender never matches.
             let matched = link.senderBundleID.map { $0.caseInsensitiveCompare(bundleID) == .orderedSame } ?? false
@@ -74,6 +79,22 @@ public enum URLMatcher {
         guard let port = rule.port else { return true }
         let defaultPort = components?.scheme?.lowercased() == "https" ? 443 : 80
         return (components?.port ?? defaultPort) == port
+    }
+
+    private static func siteHostMatches(_ value: String, components: URLComponents?) -> Bool {
+        func site(_ host: String?) -> String? {
+            guard let host = host.flatMap(normalizedHost) else { return nil }
+            return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+        }
+        guard let expected = site(value) else { return false }
+        return site(components?.host) == expected
+    }
+
+    private static func pathIsWithin(_ path: String, prefix: String) -> Bool {
+        var prefix = prefix
+        while prefix.hasSuffix("/") { prefix.removeLast() }
+        guard !prefix.isEmpty else { return true }
+        return path == prefix || path.hasPrefix(prefix + "/")
     }
 
     private static func normalizedURL(_ url: URL) -> String? {

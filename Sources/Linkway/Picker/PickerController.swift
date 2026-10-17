@@ -8,7 +8,7 @@ final class PickerController: NSObject, NSWindowDelegate {
     private struct Request {
         let link: IncomingLink
         var destinations: [Destination]
-        let rememberTarget: String?
+        let rememberTargets: [RememberTarget]
         let iconProvider: @MainActor (Destination) -> NSImage
         let completion: @MainActor (PickerResult) -> Void
     }
@@ -31,11 +31,11 @@ final class PickerController: NSObject, NSWindowDelegate {
     func present(
         link: IncomingLink,
         destinations: [Destination],
-        rememberTarget: String?,
+        rememberTargets: [RememberTarget],
         iconProvider: @escaping @MainActor (Destination) -> NSImage,
         completion: @escaping @MainActor (PickerResult) -> Void
     ) {
-        queue.append(Request(link: link, destinations: destinations, rememberTarget: rememberTarget,
+        queue.append(Request(link: link, destinations: destinations, rememberTargets: rememberTargets,
                              iconProvider: iconProvider, completion: completion))
         showNext()
     }
@@ -56,7 +56,7 @@ final class PickerController: NSObject, NSWindowDelegate {
         let request = queue.removeFirst()
         current = request
         previousApplication = NSWorkspace.shared.frontmostApplication
-        let model = PickerModel(link: request.link, destinations: request.destinations, rememberTarget: request.rememberTarget)
+        let model = PickerModel(link: request.link, destinations: request.destinations, rememberTargets: request.rememberTargets)
         model.onResult = { [weak self] result in self?.finish(result) }
         self.model = model
         let panel = PickerPanel(
@@ -122,7 +122,7 @@ final class PickerController: NSObject, NSWindowDelegate {
         if modifiers.contains(.command) {
             switch event.charactersIgnoringModifiers?.lowercased() {
             case "c": model.copyLink()
-            case "r" where model.rememberTarget != nil: model.remember.toggle()
+            case "r" where !model.rememberTargets.isEmpty: model.cycleRememberScope()
             default: return false
             }
             return true

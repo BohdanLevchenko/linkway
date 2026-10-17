@@ -123,16 +123,15 @@ final class LinkRouter {
     }
 
     private func showPicker(for link: IncomingLink) {
-        let rememberTarget = RuleSuggestion.rememberTarget(for: link)
         picker.present(
             link: link,
             destinations: pickerDestinations(for: link),
-            rememberTarget: rememberTarget?.label,
+            rememberTargets: RuleSuggestion.rememberTargets(for: link),
             iconProvider: { [registry] in registry.icon(for: $0) },
             completion: { [weak self] result in
                 guard let self, case .open(let request, let remember) = result else { return }
-                if remember, let rememberTarget {
-                    configuration.remember(rememberTarget, destination: request.destination, privateWindow: request.privateWindow)
+                if let remember {
+                    configuration.remember(remember, destination: request.destination, privateWindow: request.privateWindow)
                     persist()
                 }
                 launch(request, for: link)

@@ -70,19 +70,19 @@ final class PickerModel: ObservableObject {
     let link: IncomingLink
     @Published private(set) var destinations: [Destination]
     @Published private(set) var rows: [PickerRow]
-    let rememberTarget: String?
-    @Published var remember = false
+    let rememberTargets: [RememberTarget]
+    @Published var rememberIndex: Int? = nil
     @Published private(set) var prefix: PickerShortcut?
     private var prefixTimeout: Task<Void, Never>?
     @Published var selectedID: DestinationID?
     @Published var shiftHeld = false
     var onResult: (@MainActor (PickerResult) -> Void)?
 
-    init(link: IncomingLink, destinations: [Destination], rememberTarget: String? = nil) {
+    init(link: IncomingLink, destinations: [Destination], rememberTargets: [RememberTarget] = []) {
         self.link = link
         self.destinations = destinations
         rows = PickerLayout.rows(for: destinations)
-        self.rememberTarget = rememberTarget
+        self.rememberTargets = rememberTargets
         selectedID = destinations.first?.id
     }
 
@@ -119,11 +119,21 @@ final class PickerModel: ObservableObject {
         open(destination)
     }
 
+    var currentTarget: RememberTarget? {
+        rememberIndex.map { rememberTargets[$0] }
+    }
+
+    func cycleRememberScope() {
+        guard !rememberTargets.isEmpty else { return }
+        let next = rememberIndex.map { $0 + 1 } ?? 0
+        rememberIndex = next < rememberTargets.count ? next : nil
+    }
+
     func open(_ destination: Destination, privateWindow: Bool? = nil) {
         onResult?(.open(LaunchRequest(
             url: link.url, destination: destination.id,
             privateWindow: (privateWindow ?? shiftHeld) && destination.supportsPrivateWindow
-        ), remember: remember))
+        ), remember: currentTarget))
     }
 
     func clearPrefix() {
@@ -201,10 +211,35 @@ struct PickerView: View {
             }
             Divider()
             VStack(alignment: .leading, spacing: 10) {
-                if let target = model.rememberTarget {
-                    HStack {
-                        Toggle("Remember for \(target)", isOn: $model.remember)
+                if let firstTarget = model.rememberTargets.first {
+                    HStack(spacing: 6) {
+                        Toggle("Remember for", isOn: Binding(
+                            get: { model.rememberIndex != nil },
+                            set: { model.rememberIndex = $0 ? 0 : nil }
+                        ))
                             .toggleStyle(.checkbox)
+                            .fixedSize()
+                        if model.rememberTargets.count > 1 {
+                            Picker("Remember scope", selection: Binding(
+                                get: { model.rememberIndex ?? 0 },
+                                set: { model.rememberIndex = $0 }
+                            )) {
+                                ForEach(model.rememberTargets.indices, id: \.self) { index in
+                                    Text(model.rememberTargets[index].label).tag(index)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            .labelsHidden()
+                            .controlSize(.small)
+                            .font(.system(.caption, design: .monospaced))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        } else {
+                            Text(firstTarget.label)
+                                .font(.system(.caption, design: .monospaced))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
                         Spacer(minLength: 8)
                         Text("⌘R")
                     }

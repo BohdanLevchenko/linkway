@@ -2,7 +2,8 @@ import Foundation
 import LinkwayCore
 
 enum PickerResult: Sendable {
-    case open(LaunchRequest, remember: Bool)
+    /// `remember` is the scope the user chose to save this choice for, or nil.
+    case open(LaunchRequest, remember: RememberTarget?)
     case copied(URL)
     case dismissed
 }

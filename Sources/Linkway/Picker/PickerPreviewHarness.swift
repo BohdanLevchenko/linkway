@@ -23,7 +23,10 @@ extension PickerController {
         sampleController.present(
             link: IncomingLink(url: url, receivedAt: Date(), senderBundleID: nil, forcePicker: true),
             destinations: destinations,
-            rememberTarget: "example.com",
+            rememberTargets: [
+                RememberTarget(label: "example.com", condition: .hostIncludingSubdomains("example.com")),
+                RememberTarget(label: "example.com/articles", condition: .sitePath(host: "example.com", pathPrefix: "/articles")),
+            ],
             iconProvider: { NSWorkspace.shared.icon(forFile: $0.appURL.path) },
             completion: { _ in }
         )
