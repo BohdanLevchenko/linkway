@@ -40,6 +40,10 @@ private struct PreferencesView: View {
                 .tabItem { Label("Browsers", systemImage: "globe") }
             DestinationPreferencesView(model: model, kind: .mailClient)
                 .tabItem { Label("Mail", systemImage: "envelope") }
+            RulesPreferencesView(model: model)
+                .tabItem { Label("Rules", systemImage: "list.bullet") }
+            RoutingTestView(model: model)
+                .tabItem { Label("Test", systemImage: "checkmark.circle") }
         }
         .padding(16)
         .alert("Configuration Error", isPresented: Binding(
