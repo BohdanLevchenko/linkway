@@ -2,17 +2,87 @@ import AppKit
 import LinkwayCore
 import SwiftUI
 
+enum PickerShortcut: Equatable, Sendable {
+    case group(Int)
+    case member(group: Int, member: Int)
+
+    var label: String {
+        switch self {
+        case .group(let number): return "\(number)"
+        case .member(let group, let member): return "\(group).\(member)"
+        }
+    }
+}
+
+enum PickerRow: Identifiable, Sendable {
+    enum ID: Hashable {
+        case header(String)
+        case destination(DestinationID)
+    }
+
+    case header(first: Destination, shortcut: PickerShortcut?)
+    case destination(Destination, shortcut: PickerShortcut?, indented: Bool)
+
+    var id: ID {
+        switch self {
+        case .header(let first, _): return .header(first.id.bundleID)
+        case .destination(let destination, _, _): return .destination(destination.id)
+        }
+    }
+
+    var destination: Destination? {
+        if case .destination(let destination, _, _) = self { return destination }
+        return nil
+    }
+}
+
+/// Preserves the first appearance of each app and the incoming order of its profiles.
+enum PickerLayout {
+    static func rows(for destinations: [Destination]) -> [PickerRow] {
+        var groups: [[Destination]] = []
+        var groupIndices: [String: Int] = [:]
+        for destination in destinations {
+            if let index = groupIndices[destination.id.bundleID] {
+                groups[index].append(destination)
+            } else {
+                groupIndices[destination.id.bundleID] = groups.count
+                groups.append([destination])
+            }
+        }
+        return groups.enumerated().flatMap { index, members -> [PickerRow] in
+            let number = index + 1
+            let shortcut: PickerShortcut? = number <= 9 ? .group(number) : nil
+            guard let first = members.first else { return [] }
+            if members.count == 1 {
+                return [.destination(first, shortcut: shortcut, indented: false)]
+            }
+            return [.header(first: first, shortcut: shortcut)] + members.enumerated().map { memberIndex, member in
+                let memberShortcut: PickerShortcut? = number <= 9 && memberIndex < 9
+                    ? .member(group: number, member: memberIndex + 1) : nil
+                return .destination(member, shortcut: memberShortcut, indented: true)
+            }
+        }
+    }
+}
+
 @MainActor
 final class PickerModel: ObservableObject {
     let link: IncomingLink
     @Published private(set) var destinations: [Destination]
+    @Published private(set) var rows: [PickerRow]
+    let rememberTarget: String?
+    @Published var remember = false
+    @Published private(set) var prefix: PickerShortcut?
+    private var prefixTimeout: Task<Void, Never>?
     @Published var selectedID: DestinationID?
     @Published var shiftHeld = false
     var onResult: (@MainActor (PickerResult) -> Void)?
 
-    init(link: IncomingLink, destinations: [Destination]) {
+    init(link: IncomingLink, destinations: [Destination], rememberTarget: String? = nil) {
         self.link = link
         self.destinations = destinations
+        rows = PickerLayout.rows(for: destinations)
+        self.rememberTarget = rememberTarget
         selectedID = destinations.first?.id
     }
 
@@ -27,13 +97,18 @@ final class PickerModel: ObservableObject {
     }
 
     func updateDestinations(_ destinations: [Destination]) {
+        clearPrefix()
         self.destinations = destinations
+        rows = PickerLayout.rows(for: destinations)
         if !destinations.contains(where: { $0.id == selectedID }) {
             selectedID = destinations.first?.id
         }
     }
 
+    private var selectableDestinations: [Destination] { rows.compactMap(\.destination) }
+
     func moveSelection(by offset: Int) {
+        let destinations = selectableDestinations
         guard !destinations.isEmpty else { return }
         let index = destinations.firstIndex(where: { $0.id == selectedID }) ?? 0
         selectedID = destinations[min(max(index + offset, 0), destinations.count - 1)].id
@@ -48,7 +123,52 @@ final class PickerModel: ObservableObject {
         onResult?(.open(LaunchRequest(
             url: link.url, destination: destination.id,
             privateWindow: (privateWindow ?? shiftHeld) && destination.supportsPrivateWindow
-        )))
+        ), remember: remember))
+    }
+
+    func clearPrefix() {
+        prefixTimeout?.cancel()
+        prefixTimeout = nil
+        prefix = nil
+    }
+
+    func selectGroup(_ first: Destination) {
+        clearPrefix()
+        selectedID = first.id
+    }
+
+    /// Returns true for a recognized group or any second digit, including an invalid member.
+    func pickDigit(_ number: Int) -> Bool {
+        if case .group(let group) = prefix {
+            clearPrefix()
+            if let destination = rows.first(where: {
+                if case .destination(_, .member(let rowGroup, let member), _) = $0 {
+                    return rowGroup == group && member == number
+                }
+                return false
+            })?.destination {
+                open(destination)
+            }
+            return true
+        }
+        for row in rows {
+            switch row {
+            case .destination(let destination, .group(let group), _) where group == number:
+                open(destination)
+                return true
+            case .header(let first, .group(let group)) where group == number:
+                selectedID = first.id
+                prefix = .group(number)
+                prefixTimeout = Task { @MainActor [weak self] in
+                    do { try await Task.sleep(for: .seconds(1.5)) }
+                    catch { return }
+                    self?.clearPrefix()
+                }
+                return true
+            default: continue
+            }
+        }
+        return false
     }
 
     func copyLink() {
@@ -80,14 +200,24 @@ struct PickerView: View {
                 destinationList
             }
             Divider()
-            HStack {
-                Text("↑↓ select · ↩ open · esc dismiss")
-                Spacer()
-                Button(action: model.copyLink) {
-                    Text("Copy Link ⌘C")
+            VStack(alignment: .leading, spacing: 10) {
+                if let target = model.rememberTarget {
+                    HStack {
+                        Toggle("Remember for \(target)", isOn: $model.remember)
+                            .toggleStyle(.checkbox)
+                        Spacer(minLength: 8)
+                        Text("⌘R")
+                    }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Copy Link")
+                HStack {
+                    Text("↑↓ select · ↩ open · 1-9 pick · esc dismiss")
+                    Spacer(minLength: 4)
+                    Button(action: model.copyLink) {
+                        Text("Copy Link ⌘C")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Copy Link")
+                }
             }
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -141,9 +271,14 @@ struct PickerView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 4) {
-                    ForEach(Array(model.destinations.enumerated()), id: \.element.id) { index, destination in
-                        row(destination, shortcut: index < 9 ? index + 1 : nil)
-                            .id(destination.id)
+                    ForEach(model.rows) { item in
+                        switch item {
+                        case .header(let first, let shortcut):
+                            groupHeader(first, shortcut: shortcut)
+                        case .destination(let destination, let shortcut, let indented):
+                            row(destination, shortcut: shortcut, indented: indented)
+                                .id(destination.id)
+                        }
                     }
                 }
                 .padding(10)
@@ -154,22 +289,63 @@ struct PickerView: View {
         }
     }
 
-    private func row(_ destination: Destination, shortcut: Int?) -> some View {
+    private func shortcutBadge(_ shortcut: PickerShortcut, active: Bool = false) -> some View {
+        Text(shortcut.label)
+            .font(.system(.caption, design: .monospaced))
+            .foregroundStyle(active ? Color.accentColor : Color.secondary)
+            .frame(minWidth: 22, minHeight: 22)
+            .padding(.horizontal, 4)
+            .background(active ? Color.accentColor.opacity(0.18) : Color(nsColor: .quaternaryLabelColor).opacity(0.12),
+                        in: RoundedRectangle(cornerRadius: 5))
+            .overlay {
+                if active {
+                    RoundedRectangle(cornerRadius: 5).strokeBorder(Color.accentColor, lineWidth: 2)
+                }
+            }
+    }
+
+    private func groupHeader(_ first: Destination, shortcut: PickerShortcut?) -> some View {
+        Button { model.selectGroup(first) } label: {
+            HStack(spacing: 12) {
+                Image(nsImage: iconProvider(first))
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 32, height: 32)
+                    .accessibilityHidden(true)
+                Text(first.appName)
+                    .font(.body.weight(.medium))
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                if let shortcut { shortcutBadge(shortcut, active: model.prefix == shortcut) }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(first.appName + (shortcut.map { ", shortcut \($0.label)" } ?? ""))
+        .accessibilityValue(model.prefix == shortcut && shortcut != nil ? "Waiting for profile number" : "")
+        .accessibilityHint("Select first profile")
+    }
+
+    private func row(_ destination: Destination, shortcut: PickerShortcut?, indented: Bool) -> some View {
         let selected = destination.id == model.selectedID
         return Button {
             model.open(destination, privateWindow: NSEvent.modifierFlags.contains(.shift))
         } label: {
             HStack(spacing: 12) {
-                Image(nsImage: iconProvider(destination))
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 32, height: 32)
-                    .accessibilityHidden(true)
+                if !indented {
+                    Image(nsImage: iconProvider(destination))
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 32, height: 32)
+                        .accessibilityHidden(true)
+                }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(destination.appName)
+                    Text(indented ? (destination.profileName ?? destination.appName) : destination.appName)
                         .font(.body.weight(.medium))
                         .foregroundStyle(.primary)
-                    if let profile = destination.profileName {
+                    if !indented, let profile = destination.profileName {
                         Text(profile)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -182,15 +358,10 @@ struct PickerView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                if let shortcut {
-                    Text("\(shortcut)")
-                        .font(.system(.caption, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 22, height: 22)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 5))
-                }
+                if let shortcut { shortcutBadge(shortcut) }
             }
-            .padding(.horizontal, 12)
+            .padding(.leading, indented ? 56 : 12)
+            .padding(.trailing, 12)
             .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(RoundedRectangle(cornerRadius: 9))
@@ -208,7 +379,7 @@ struct PickerView: View {
             if hovering { model.selectedID = destination.id }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(destination.displayName + (shortcut.map { ", shortcut \($0)" } ?? ""))
+        .accessibilityLabel(destination.displayName + (shortcut.map { ", shortcut \($0.label)" } ?? ""))
         .accessibilityValue(selected ? "Selected" : "")
         .accessibilityHint(destination.supportsPrivateWindow ? "Hold Shift to open in a private window" : "Open link")
     }

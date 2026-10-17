@@ -16,6 +16,9 @@ final class LinkRouter {
     private var configurationLoaded = false
     private var pending: [IncomingLink] = []
     private var recentLaunches: [String: Date] = [:]
+    /// False when the file on disk exists but could not be read; saving then would overwrite it with defaults.
+    private var canPersist = true
+    private var lastSave: Task<Void, Never>?
 
     var onConfigurationLoaded: ((LinkwayConfiguration) -> Void)?
 
@@ -32,6 +35,7 @@ final class LinkRouter {
                 configuration = try await store.load()
             } catch {
                 logger.error("Configuration unreadable, using defaults without saving: \(String(describing: error), privacy: .public)")
+                canPersist = false
             }
             configurationLoaded = true
             onConfigurationLoaded?(configuration)
@@ -42,6 +46,40 @@ final class LinkRouter {
     func handle(_ link: IncomingLink) {
         pending.append(link)
         drain()
+    }
+
+    var rememberedRules: [Rule] { configuration.rememberedRules }
+
+    func forgetRule(id: UUID) {
+        configuration.forgetRule(id: id)
+        persist()
+    }
+
+    func targetName(for action: RuleAction) -> String {
+        switch action {
+        case .showPicker:
+            return "Picker"
+        case .open(let id, let privateWindow):
+            let name = registry.destination(for: id)?.displayName ?? id.rawValue
+            return privateWindow ? "\(name) (private)" : name
+        }
+    }
+
+    private func persist() {
+        guard canPersist else {
+            logger.error("Configuration change kept in memory only: the file on disk was unreadable")
+            return
+        }
+        let snapshot = configuration
+        let previous = lastSave
+        lastSave = Task { [store, logger] in
+            await previous?.value
+            do {
+                try await store.save(snapshot)
+            } catch {
+                logger.error("Saving configuration failed: \(String(describing: error), privacy: .public)")
+            }
+        }
     }
 
     private var isReady: Bool { configurationLoaded && registry.hasLoaded }
@@ -85,13 +123,19 @@ final class LinkRouter {
     }
 
     private func showPicker(for link: IncomingLink) {
+        let rememberTarget = RuleSuggestion.rememberTarget(for: link)
         picker.present(
             link: link,
             destinations: pickerDestinations(for: link),
+            rememberTarget: rememberTarget?.label,
             iconProvider: { [registry] in registry.icon(for: $0) },
             completion: { [weak self] result in
-                guard case .open(let request) = result else { return }
-                self?.launch(request, for: link)
+                guard let self, case .open(let request, let remember) = result else { return }
+                if remember, let rememberTarget {
+                    configuration.remember(rememberTarget, destination: request.destination, privateWindow: request.privateWindow)
+                    persist()
+                }
+                launch(request, for: link)
             }
         )
     }

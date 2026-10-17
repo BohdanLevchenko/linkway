@@ -1,14 +1,18 @@
 import AppKit
+import LinkwayCore
 
 @MainActor
 final class StatusMenu: NSObject, NSMenuDelegate {
     private let ingress: LinkIngress
+    private let router: LinkRouter
+    private let rememberedItem = NSMenuItem(title: "Remembered Choices", action: nil, keyEquivalent: "")
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let defaultBrowserItem = NSMenuItem()
     private var isSettingDefault = false
 
-    init(ingress: LinkIngress) {
+    init(ingress: LinkIngress, router: LinkRouter) {
         self.ingress = ingress
+        self.router = router
         super.init()
 
         statusItem.button?.title = "Linkway"
@@ -20,6 +24,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.addItem(defaultBrowserItem)
         menu.addItem(item("Make Linkway Default Browser...", action: #selector(makeDefaultBrowser)))
         menu.addItem(.separator())
+        rememberedItem.submenu = NSMenu()
+        menu.addItem(rememberedItem)
+        menu.addItem(.separator())
         menu.addItem(item("Quit Linkway", action: #selector(quit), keyEquivalent: "q"))
         statusItem.menu = menu
         refreshDefaultBrowser()
@@ -27,6 +34,33 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) {
         refreshDefaultBrowser()
+        refreshRemembered()
+    }
+
+    private func refreshRemembered() {
+        let submenu = NSMenu()
+        submenu.autoenablesItems = false
+        let rules = router.rememberedRules
+        if rules.isEmpty {
+            let empty = NSMenuItem(title: "None yet. Tick \"Remember\" in the picker.", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            submenu.addItem(empty)
+        } else {
+            let header = NSMenuItem(title: "Click to forget", action: nil, keyEquivalent: "")
+            header.isEnabled = false
+            submenu.addItem(header)
+        }
+        for rule in rules {
+            let entry = item("\(rule.name) → \(router.targetName(for: rule.action))", action: #selector(forgetRemembered(_:)))
+            entry.representedObject = rule.id
+            submenu.addItem(entry)
+        }
+        rememberedItem.submenu = submenu
+    }
+
+    @objc private func forgetRemembered(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? UUID else { return }
+        router.forgetRule(id: id)
     }
 
     private func item(_ title: String, action: Selector, keyEquivalent: String = "") -> NSMenuItem {

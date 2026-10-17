@@ -15,7 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        statusMenu = StatusMenu(ingress: ingress)
+        statusMenu = StatusMenu(ingress: ingress, router: router)
         router.onConfigurationLoaded = { [ingress, router] configuration in
             ingress.forcePickerModifier = configuration.forcePickerModifier.eventFlag
             ingress.onLink = { link in router.handle(link) }

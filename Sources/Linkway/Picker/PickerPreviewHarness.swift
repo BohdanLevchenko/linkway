@@ -23,6 +23,7 @@ extension PickerController {
         sampleController.present(
             link: IncomingLink(url: url, receivedAt: Date(), senderBundleID: nil, forcePicker: true),
             destinations: destinations,
+            rememberTarget: "example.com",
             iconProvider: { NSWorkspace.shared.icon(forFile: $0.appURL.path) },
             completion: { _ in }
         )

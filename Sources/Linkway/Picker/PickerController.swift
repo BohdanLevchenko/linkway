@@ -8,6 +8,7 @@ final class PickerController: NSObject, NSWindowDelegate {
     private struct Request {
         let link: IncomingLink
         var destinations: [Destination]
+        let rememberTarget: String?
         let iconProvider: @MainActor (Destination) -> NSImage
         let completion: @MainActor (PickerResult) -> Void
     }
@@ -30,10 +31,11 @@ final class PickerController: NSObject, NSWindowDelegate {
     func present(
         link: IncomingLink,
         destinations: [Destination],
+        rememberTarget: String?,
         iconProvider: @escaping @MainActor (Destination) -> NSImage,
         completion: @escaping @MainActor (PickerResult) -> Void
     ) {
-        queue.append(Request(link: link, destinations: destinations,
+        queue.append(Request(link: link, destinations: destinations, rememberTarget: rememberTarget,
                              iconProvider: iconProvider, completion: completion))
         showNext()
     }
@@ -54,7 +56,7 @@ final class PickerController: NSObject, NSWindowDelegate {
         let request = queue.removeFirst()
         current = request
         previousApplication = NSWorkspace.shared.frontmostApplication
-        let model = PickerModel(link: request.link, destinations: request.destinations)
+        let model = PickerModel(link: request.link, destinations: request.destinations, rememberTarget: request.rememberTarget)
         model.onResult = { [weak self] result in self?.finish(result) }
         self.model = model
         let panel = PickerPanel(
@@ -110,9 +112,19 @@ final class PickerController: NSObject, NSWindowDelegate {
 
     private func handleKey(_ event: NSEvent, model: PickerModel) -> Bool {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if modifiers.intersection([.command, .control, .option]).isEmpty,
+           let characters = event.characters(byApplyingModifiers: []),
+           characters.count == 1, let number = Int(characters),
+           (1...9).contains(number) || (number == 0 && model.prefix != nil) {
+            return model.pickDigit(number)
+        }
+        model.clearPrefix()
         if modifiers.contains(.command) {
-            guard event.charactersIgnoringModifiers?.lowercased() == "c" else { return false }
-            model.copyLink()
+            switch event.charactersIgnoringModifiers?.lowercased() {
+            case "c": model.copyLink()
+            case "r" where model.rememberTarget != nil: model.remember.toggle()
+            default: return false
+            }
             return true
         }
         guard modifiers.intersection([.control, .option]).isEmpty else { return false }
@@ -121,11 +133,7 @@ final class PickerController: NSObject, NSWindowDelegate {
         case 125: model.moveSelection(by: 1)
         case 126: model.moveSelection(by: -1)
         case 36, 76: model.openSelected()
-        default:
-            guard let characters = event.charactersIgnoringModifiers,
-                  let number = Int(characters), (1...9).contains(number),
-                  model.destinations.indices.contains(number - 1) else { return false }
-            model.open(model.destinations[number - 1])
+        default: return false
         }
         return true
     }
@@ -160,6 +168,7 @@ final class PickerController: NSObject, NSWindowDelegate {
         panel?.orderOut(nil)
         panel?.close()
         panel = nil
+        model?.clearPrefix()
         model = nil
         if case .open = result {
             waitForActivation(timeout: 1.5)
