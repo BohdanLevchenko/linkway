@@ -5,6 +5,11 @@ public enum MatchTarget: String, Codable, Sendable, Hashable {
     case original
 }
 
+public enum RuleOrigin: String, Codable, Sendable, Hashable {
+    case manual
+    case remembered
+}
+
 public struct Rule: Codable, Sendable, Hashable, Identifiable {
     public var id: UUID
     public var name: String
@@ -12,10 +17,12 @@ public struct Rule: Codable, Sendable, Hashable, Identifiable {
     public var condition: RuleCondition
     public var action: RuleAction
     public var matchTarget: MatchTarget
+    public var origin: RuleOrigin
 
     public init(
         id: UUID = UUID(), name: String, isEnabled: Bool = true,
-        condition: RuleCondition, action: RuleAction, matchTarget: MatchTarget = .processed
+        condition: RuleCondition, action: RuleAction, matchTarget: MatchTarget = .processed,
+        origin: RuleOrigin = .manual
     ) {
         self.id = id
         self.name = name
@@ -23,6 +30,18 @@ public struct Rule: Codable, Sendable, Hashable, Identifiable {
         self.condition = condition
         self.action = action
         self.matchTarget = matchTarget
+        self.origin = origin
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
+        condition = try container.decode(RuleCondition.self, forKey: .condition)
+        action = try container.decode(RuleAction.self, forKey: .action)
+        matchTarget = try container.decode(MatchTarget.self, forKey: .matchTarget)
+        origin = try container.decodeIfPresent(RuleOrigin.self, forKey: .origin) ?? .manual
     }
 }
 

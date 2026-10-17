@@ -131,7 +131,7 @@ public enum URLMatcher {
         return result
     }
 
-    private static func recipientDomains(_ components: URLComponents?) -> [String] {
+    static func recipientDomains(_ components: URLComponents?) -> [String] {
         var recipients = [components?.percentEncodedPath.removingPercentEncoding ?? ""]
         recipients += (components?.queryItems ?? []).filter { $0.name.caseInsensitiveCompare("to") == .orderedSame }
             .compactMap(\.value)
