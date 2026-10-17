@@ -21,6 +21,8 @@ final class LinkRouter {
     private var lastSave: Task<Void, Never>?
 
     var onConfigurationLoaded: ((LinkwayConfiguration) -> Void)?
+    private var configurationObservers: [(LinkwayConfiguration) -> Void] = []
+    private var destinationObservers: [() -> Void] = []
 
     init(registry: DestinationRegistry, store: ConfigurationStore) {
         self.registry = registry
@@ -39,6 +41,7 @@ final class LinkRouter {
             }
             configurationLoaded = true
             onConfigurationLoaded?(configuration)
+            notifyConfigurationChanged()
             drain()
         }
     }
@@ -51,8 +54,59 @@ final class LinkRouter {
     var rememberedRules: [Rule] { configuration.rememberedRules }
 
     func forgetRule(id: UUID) {
-        configuration.forgetRule(id: id)
+        updateConfiguration { $0.forgetRule(id: id) }
+    }
+
+    // MARK: Preferences API
+
+    /// Handlers run on every configuration change, including the initial load, imports, and remembered choices.
+    func observeConfiguration(_ handler: @escaping (LinkwayConfiguration) -> Void) {
+        configurationObservers.append(handler)
+        if configurationLoaded { handler(configuration) }
+    }
+
+    func observeDestinations(_ handler: @escaping () -> Void) {
+        destinationObservers.append(handler)
+    }
+
+    func updateConfiguration(_ change: (inout LinkwayConfiguration) -> Void) {
+        var updated = configuration
+        change(&updated)
+        guard updated != configuration else { return }
+        configuration = updated
         persist()
+        notifyConfigurationChanged()
+    }
+
+    func importConfiguration(from url: URL) async throws {
+        await lastSave?.value
+        try await store.import(from: url)
+        configuration = try await store.load()
+        canPersist = true
+        notifyConfigurationChanged()
+    }
+
+    func exportConfiguration(to url: URL) async throws {
+        await lastSave?.value
+        try await store.export(to: url)
+    }
+
+    /// Everything the picker can show, hidden entries included, in discovery order.
+    var pickerEntries: [Destination] { registry.destinations }
+    var ruleTargets: [Destination] { registry.ruleTargets }
+    var availableIDs: Set<DestinationID> { registry.availableIDs }
+    func destination(for id: DestinationID) -> Destination? { registry.destination(for: id) }
+    func icon(for destination: Destination) -> NSImage { registry.icon(for: destination) }
+
+    /// Dry run of routing for the rule tester; never launches anything.
+    func explain(_ url: URL, senderBundleID: String?) -> RoutingExplanation {
+        let link = IncomingLink(url: url, receivedAt: Date(), senderBundleID: senderBundleID, forcePicker: false)
+        return RoutingEngine(rules: configuration.rules, fallbacks: configuration.fallbacks)
+            .explain(link, processedURL: url, availableDestinations: registry.availableIDs)
+    }
+
+    private func notifyConfigurationChanged() {
+        for observer in configurationObservers { observer(configuration) }
     }
 
     func targetName(for action: RuleAction) -> String {
@@ -93,6 +147,7 @@ final class LinkRouter {
 
     private func destinationsChanged() {
         picker.updateDestinations { [weak self] link in self?.pickerDestinations(for: link) ?? [] }
+        for observer in destinationObservers { observer() }
         drain()
     }
 
@@ -131,8 +186,7 @@ final class LinkRouter {
             completion: { [weak self] result in
                 guard let self, case .open(let request, let remember) = result else { return }
                 if let remember {
-                    configuration.remember(remember, destination: request.destination, privateWindow: request.privateWindow)
-                    persist()
+                    updateConfiguration { $0.remember(remember, destination: request.destination, privateWindow: request.privateWindow) }
                 }
                 launch(request, for: link)
             }
@@ -155,7 +209,10 @@ final class LinkRouter {
     }
 
     private func pickerDestinations(for link: IncomingLink) -> [Destination] {
-        let kind: DestinationKind = link.kind == .mail ? .mailClient : .browser
+        pickerDestinations(kind: link.kind == .mail ? .mailClient : .browser)
+    }
+
+    func pickerDestinations(kind: DestinationKind) -> [Destination] {
         let favorites = configuration.favoriteDestinations
         let order = configuration.destinationOrder
         func rank(_ id: DestinationID) -> (Int, Int) {

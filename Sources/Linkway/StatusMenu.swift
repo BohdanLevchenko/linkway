@@ -3,6 +3,7 @@ import LinkwayCore
 
 @MainActor
 final class StatusMenu: NSObject, NSMenuDelegate {
+    var onOpenPreferences: (() -> Void)?
     private let ingress: LinkIngress
     private let router: LinkRouter
     private let rememberedItem = NSMenuItem(title: "Remembered Choices", action: nil, keyEquivalent: "")
@@ -27,6 +28,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         rememberedItem.submenu = NSMenu()
         menu.addItem(rememberedItem)
         menu.addItem(.separator())
+        menu.addItem(item("Preferences…", action: #selector(openPreferences), keyEquivalent: ","))
         menu.addItem(item("Quit Linkway", action: #selector(quit), keyEquivalent: "q"))
         statusItem.menu = menu
         refreshDefaultBrowser()
@@ -122,6 +124,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         alert.informativeText = message
         NSApplication.shared.activate(ignoringOtherApps: true)
         alert.runModal()
+    }
+
+    @objc private func openPreferences() {
+        onOpenPreferences?()
     }
 
     @objc private func quit() {

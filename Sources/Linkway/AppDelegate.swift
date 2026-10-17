@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store: ConfigurationStore(fileURL: ConfigurationStore.defaultFileURL)
     )
     private var statusMenu: StatusMenu?
+    private var preferencesWindowController: PreferencesWindowController?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         ingress.install()
@@ -16,9 +17,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusMenu = StatusMenu(ingress: ingress, router: router)
+        let preferences = PreferencesWindowController(router: router)
+        preferencesWindowController = preferences
+        statusMenu?.onOpenPreferences = { [weak preferences] in preferences?.show() }
         router.onConfigurationLoaded = { [ingress, router] configuration in
             ingress.forcePickerModifier = configuration.forcePickerModifier.eventFlag
             ingress.onLink = { link in router.handle(link) }
+        }
+        router.observeConfiguration { [ingress] configuration in
+            ingress.forcePickerModifier = configuration.forcePickerModifier.eventFlag
         }
         router.start()
     }

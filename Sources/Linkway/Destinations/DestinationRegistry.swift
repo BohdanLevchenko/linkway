@@ -35,6 +35,12 @@ final class DestinationRegistry {
         }
     }
 
+    /// Every destination a rule can target, picker entries first, then browser-level and single-profile IDs.
+    var ruleTargets: [Destination] {
+        let shown = Set(destinations.map(\.id))
+        return destinations + index.values.filter { !shown.contains($0.id) }.sorted { $0.displayName < $1.displayName }
+    }
+
     func destination(for id: DestinationID) -> Destination? {
         index[id]
     }
