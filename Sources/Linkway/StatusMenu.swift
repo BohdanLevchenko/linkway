@@ -4,14 +4,16 @@ import LinkwayCore
 @MainActor
 final class StatusMenu: NSObject, NSMenuDelegate {
     var onOpenPreferences: (() -> Void)?
+    var onOpenSetup: (() -> Void)?
     private let ingress: LinkIngress
     private let router: LinkRouter
     private let rememberedItem = NSMenuItem(title: "Remembered Choices", action: nil, keyEquivalent: "")
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let defaultBrowserItem = NSMenuItem()
-    private var isSettingDefault = false
+    private let defaultHandlers: DefaultHandlers
 
-    init(ingress: LinkIngress, router: LinkRouter) {
+    init(ingress: LinkIngress, router: LinkRouter, defaultHandlers: DefaultHandlers) {
+        self.defaultHandlers = defaultHandlers
         self.ingress = ingress
         self.router = router
         super.init()
@@ -28,6 +30,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         rememberedItem.submenu = NSMenu()
         menu.addItem(rememberedItem)
         menu.addItem(.separator())
+        menu.addItem(item("Setup…", action: #selector(openSetup)))
         menu.addItem(item("Preferences…", action: #selector(openPreferences), keyEquivalent: ","))
         menu.addItem(item("Quit Linkway", action: #selector(quit), keyEquivalent: "q"))
         statusItem.menu = menu
@@ -72,20 +75,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
 
     private func refreshDefaultBrowser() {
-        let browserURL = NSWorkspace.shared.urlForApplication(
-            toOpen: URL(string: "https://example.com")!
-        )
-        let status: String
-        if let browserURL {
-            if browserURL.resolvingSymlinksInPath() == Bundle.main.bundleURL.resolvingSymlinksInPath() {
-                status = "Linkway"
-            } else {
-                status = FileManager.default.displayName(atPath: browserURL.path)
-            }
-        } else {
-            status = "Unknown"
-        }
-        defaultBrowserItem.title = "Default Browser: \(status)"
+        defaultBrowserItem.title = "Default Browser: \(defaultHandlers.currentHandlerName(.browser))"
     }
 
     @objc private func openClipboard() {
@@ -99,38 +89,13 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
 
     @objc private func makeDefaultBrowser() {
-        guard !isSettingDefault else { return }
-        isSettingDefault = true
         Task {
-            defer {
-                isSettingDefault = false
-                refreshDefaultBrowser()
-            }
-            // Confirming the system prompt for one web scheme switches both, and asking again for a scheme we
-            // already own is rejected, so request only what is still missing and judge by the resulting handlers.
-            var failure: Error?
-            for scheme in ["http", "https"] where !Self.isDefaultHandler(forScheme: scheme) {
-                do {
-                    try await NSWorkspace.shared.setDefaultApplication(
-                        at: Bundle.main.bundleURL, toOpenURLsWithScheme: scheme
-                    )
-                } catch {
-                    failure = error
-                    break
-                }
-            }
-            guard ["http", "https"].allSatisfy(Self.isDefaultHandler(forScheme:)) else {
-                showAlert(title: "Default Browser Unchanged",
-                          message: failure?.localizedDescription ?? "macOS kept the current default browser.")
-                return
+            let outcome = await defaultHandlers.makeDefault(.browser)
+            refreshDefaultBrowser()
+            if case .failed(let message) = outcome {
+                showAlert(title: "Could Not Set Default Browser", message: message)
             }
         }
-    }
-
-    private static func isDefaultHandler(forScheme scheme: String) -> Bool {
-        guard let url = URL(string: "\(scheme)://example.com"),
-              let handler = NSWorkspace.shared.urlForApplication(toOpen: url) else { return false }
-        return handler.resolvingSymlinksInPath() == Bundle.main.bundleURL.resolvingSymlinksInPath()
     }
 
     private func showAlert(title: String, message: String) {
@@ -139,6 +104,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         alert.informativeText = message
         NSApplication.shared.activate(ignoringOtherApps: true)
         alert.runModal()
+    }
+
+    @objc private func openSetup() {
+        onOpenSetup?()
     }
 
     @objc private func openPreferences() {

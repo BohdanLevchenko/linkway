@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         registry: DestinationRegistry(),
         store: ConfigurationStore(fileURL: ConfigurationStore.defaultFileURL)
     )
+    private let defaultHandlers = DefaultHandlers()
     private var statusMenu: StatusMenu?
     private var preferencesWindowController: PreferencesWindowController?
 
@@ -16,7 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        statusMenu = StatusMenu(ingress: ingress, router: router)
+        statusMenu = StatusMenu(ingress: ingress, router: router, defaultHandlers: defaultHandlers)
         let preferences = PreferencesWindowController(router: router)
         preferencesWindowController = preferences
         statusMenu?.onOpenPreferences = { [weak preferences] in preferences?.show() }
