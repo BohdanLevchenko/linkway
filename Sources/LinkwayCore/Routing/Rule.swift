@@ -54,9 +54,19 @@ public enum RuleCondition: Codable, Sendable, Hashable {
     case sitePath(host: String, pathPrefix: String)
     case sourceApp(bundleID: String)
     case mailRecipientDomain(String)
+
+    enum HostExactCodingKeys: String, CodingKey { case _0 = "host" }
+    enum HostIncludingSubdomainsCodingKeys: String, CodingKey { case _0 = "host" }
+    enum UrlPrefixCodingKeys: String, CodingKey { case _0 = "prefix" }
+    enum MailRecipientDomainCodingKeys: String, CodingKey { case _0 = "domain" }
 }
 
 public enum RuleAction: Codable, Sendable, Hashable {
     case open(DestinationID, privateWindow: Bool)
     case showPicker
+
+    enum OpenCodingKeys: String, CodingKey {
+        case _0 = "destination"
+        case privateWindow
+    }
 }

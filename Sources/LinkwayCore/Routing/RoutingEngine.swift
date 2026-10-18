@@ -3,6 +3,8 @@ import Foundation
 public enum FallbackPolicy: Codable, Sendable, Hashable {
     case showPicker
     case open(DestinationID)
+
+    enum OpenCodingKeys: String, CodingKey { case _0 = "destination" }
 }
 
 public struct FallbackPolicies: Codable, Sendable, Hashable {

@@ -97,3 +97,20 @@ func invalidImportPreservesExistingFile(raw: String) async throws {
     }
     #expect(try Data(contentsOf: url) == previous)
 }
+
+@Test func encodedConfigurationHasNoPositionalKeys() throws {
+    let target = DestinationID(bundleID: "com.example.browser", profileKey: "Work")
+    let conditions: [RuleCondition] = [
+        .hostExact("a.com"), .hostIncludingSubdomains("a.com"), .urlPrefix("https://a.com/x"),
+        .pathPattern(host: nil, pattern: "/x/*"), .sitePath(host: "a.com", pathPrefix: "/x"),
+        .sourceApp(bundleID: "com.example.app"), .mailRecipientDomain("a.com"),
+    ]
+    let configuration = LinkwayConfiguration(
+        rules: conditions.map { Rule(name: "r", condition: $0, action: .open(target, privateWindow: true)) },
+        fallbacks: FallbackPolicies(web: .open(target), mail: .showPicker)
+    )
+    let json = try #require(String(data: JSONEncoder().encode(configuration), encoding: .utf8))
+    #expect(!json.contains("\"_0\""))
+    #expect(json.contains("\"destination\":\"com.example.browser#Work\""))
+    #expect(try ConfigurationStore.migrate(from: Data(json.utf8)) == configuration)
+}
