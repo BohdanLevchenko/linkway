@@ -106,16 +106,31 @@ final class StatusMenu: NSObject, NSMenuDelegate {
                 isSettingDefault = false
                 refreshDefaultBrowser()
             }
-            do {
-                for scheme in ["http", "https"] {
+            // Confirming the system prompt for one web scheme switches both, and asking again for a scheme we
+            // already own is rejected, so request only what is still missing and judge by the resulting handlers.
+            var failure: Error?
+            for scheme in ["http", "https"] where !Self.isDefaultHandler(forScheme: scheme) {
+                do {
                     try await NSWorkspace.shared.setDefaultApplication(
                         at: Bundle.main.bundleURL, toOpenURLsWithScheme: scheme
                     )
+                } catch {
+                    failure = error
+                    break
                 }
-            } catch {
-                showAlert(title: "Could Not Set Default Browser", message: error.localizedDescription)
+            }
+            guard ["http", "https"].allSatisfy(Self.isDefaultHandler(forScheme:)) else {
+                showAlert(title: "Default Browser Unchanged",
+                          message: failure?.localizedDescription ?? "macOS kept the current default browser.")
+                return
             }
         }
+    }
+
+    private static func isDefaultHandler(forScheme scheme: String) -> Bool {
+        guard let url = URL(string: "\(scheme)://example.com"),
+              let handler = NSWorkspace.shared.urlForApplication(toOpen: url) else { return false }
+        return handler.resolvingSymlinksInPath() == Bundle.main.bundleURL.resolvingSymlinksInPath()
     }
 
     private func showAlert(title: String, message: String) {
