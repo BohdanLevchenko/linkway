@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store: ConfigurationStore(fileURL: ConfigurationStore.defaultFileURL)
     )
     private let defaultHandlers = DefaultHandlers()
+    private var onboardingWindowController: OnboardingWindowController?
     private var statusMenu: StatusMenu?
     private var preferencesWindowController: PreferencesWindowController?
 
@@ -21,6 +22,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let preferences = PreferencesWindowController(router: router)
         preferencesWindowController = preferences
         statusMenu?.onOpenPreferences = { [weak preferences] in preferences?.show() }
+        let onboarding = OnboardingWindowController(handlers: defaultHandlers, router: router) {
+            [weak preferences] in preferences?.show()
+        }
+        onboardingWindowController = onboarding
+        statusMenu?.onOpenSetup = { [weak onboarding] in onboarding?.show() }
         router.onConfigurationLoaded = { [ingress, router] configuration in
             ingress.forcePickerModifier = configuration.forcePickerModifier.eventFlag
             ingress.onLink = { link in router.handle(link) }
@@ -29,6 +35,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ingress.forcePickerModifier = configuration.forcePickerModifier.eventFlag
         }
         router.start()
+        if !UserDefaults.standard.bool(forKey: "onboardingCompleted") {
+            onboarding.show()
+        }
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
