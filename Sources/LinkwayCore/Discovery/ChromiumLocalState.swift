@@ -5,11 +5,15 @@ public struct ChromiumProfile: Sendable, Hashable {
     public let directory: String
     public let displayName: String
     public let email: String?
+    public let pictureFileName: String?
+    public let highlightColorARGB: Int?
 
-    public init(directory: String, displayName: String, email: String?) {
+    public init(directory: String, displayName: String, email: String?, pictureFileName: String? = nil, highlightColorARGB: Int? = nil) {
         self.directory = directory
         self.displayName = displayName
         self.email = email
+        self.pictureFileName = pictureFileName
+        self.highlightColorARGB = highlightColorARGB
     }
 }
 
@@ -36,7 +40,8 @@ public enum ChromiumLocalState {
             return ChromiumProfile(
                 directory: directory,
                 displayName: entry.displayName ?? directory,
-                email: entry.userName
+                email: entry.userName,
+                pictureFileName: entry.pictureFileName, highlightColorARGB: entry.highlightColorARGB
             )
         }
 
@@ -86,6 +91,8 @@ private struct ProfileSection: Decodable {
 
 /// Every field is optional and type-tolerant: one odd entry must not hide the other profiles.
 private struct ProfileEntry: Decodable {
+    let pictureFileName: String?
+    let highlightColorARGB: Int?
     let name: String?
     let gaiaName: String?
     let userName: String?
@@ -94,6 +101,9 @@ private struct ProfileEntry: Decodable {
     let isGuest: Bool
 
     enum CodingKeys: String, CodingKey {
+        case pictureFileName = "gaia_picture_file_name"
+        case highlightColorARGB = "profile_highlight_color"
+        case defaultAvatarFillColor = "default_avatar_fill_color"
         case name
         case gaiaName = "gaia_name"
         case userName = "user_name"
@@ -112,6 +122,15 @@ private struct ProfileEntry: Decodable {
         func flag(_ key: CodingKeys) -> Bool {
             (try? container.decodeIfPresent(Bool.self, forKey: key)) ?? false
         }
+        pictureFileName = string(.pictureFileName).flatMap {
+            $0 != "." && $0 != ".." && !$0.contains("/") ? $0 : nil
+        }
+        func color(_ key: CodingKeys) -> Int? {
+            guard let value = try? container.decodeIfPresent(Int.self, forKey: key),
+                  value >= Int(Int32.min), value <= Int(UInt32.max) else { return nil }
+            return value
+        }
+        highlightColorARGB = color(.highlightColorARGB) ?? color(.defaultAvatarFillColor)
         name = string(.name)
         gaiaName = string(.gaiaName)
         userName = string(.userName)

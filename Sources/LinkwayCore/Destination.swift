@@ -51,6 +51,8 @@ public struct Destination: Sendable, Hashable, Identifiable {
     public let appName: String
     public let profileName: String?
     public let appURL: URL
+    public let avatarURL: URL?
+    public let highlightColorARGB: Int?
     public let supportsPrivateWindow: Bool
 
     public init(
@@ -59,8 +61,11 @@ public struct Destination: Sendable, Hashable, Identifiable {
         appName: String,
         profileName: String?,
         appURL: URL,
-        supportsPrivateWindow: Bool
+        supportsPrivateWindow: Bool,
+        avatarURL: URL? = nil, highlightColorARGB: Int? = nil
     ) {
+        self.avatarURL = avatarURL
+        self.highlightColorARGB = highlightColorARGB
         self.id = id
         self.kind = kind
         self.appName = appName

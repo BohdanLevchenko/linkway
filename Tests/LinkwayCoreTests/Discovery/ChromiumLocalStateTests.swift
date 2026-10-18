@@ -63,3 +63,28 @@ private func parse(_ json: String) throws(ChromiumLocalStateError) -> [ChromiumP
 func rejectsGarbage(input: String) {
     #expect(throws: ChromiumLocalStateError.invalidJSON) { try parse(input) }
 }
+
+@Test func parsesProfileAvatarMetadata() throws {
+    let profiles = try parse("""
+    {"profile":{"info_cache":{
+      "Default":{"gaia_picture_file_name":"Google Profile Picture.png","profile_highlight_color":-16711936},
+      "Profile 1":{"default_avatar_fill_color":-65536},
+      "Profile 2":{"profile_highlight_color":"bad","default_avatar_fill_color":4278190335}
+    }}}
+    """)
+    #expect(profiles[0].pictureFileName == "Google Profile Picture.png")
+    #expect(profiles[0].highlightColorARGB == -16711936)
+    #expect(profiles[1].pictureFileName == nil)
+    #expect(profiles[1].highlightColorARGB == -65536)
+    #expect(profiles[2].highlightColorARGB == 4278190335)
+}
+
+@Test(arguments: ["{}", #"{"gaia_picture_file_name":42,"profile_highlight_color":true}"#,
+                  #"{"gaia_picture_file_name":" ","profile_highlight_color":999999999999}"#,
+                  #"{"gaia_picture_file_name":"../outside.png","default_avatar_fill_color":[]}"#])
+func toleratesInvalidAvatarMetadata(entry: String) throws {
+    let profiles = try parse("{\"profile\":{\"info_cache\":{\"Default\":\(entry)}}}")
+    let profile = try #require(profiles.first)
+    #expect(profile.pictureFileName == nil)
+    #expect(profile.highlightColorARGB == nil)
+}
