@@ -114,3 +114,21 @@ func invalidImportPreservesExistingFile(raw: String) async throws {
     #expect(json.contains("\"destination\":\"com.example.browser#Work\""))
     #expect(try ConfigurationStore.migrate(from: Data(json.utf8)) == configuration)
 }
+
+@Test func legacyConfigurationDefaultsToTiles() throws {
+    let expected = sampleConfiguration()
+    let data = try JSONEncoder().encode(expected)
+    var object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    object.removeValue(forKey: "pickerStyle")
+    let legacy = try JSONSerialization.data(withJSONObject: object)
+    let decoded = try JSONDecoder().decode(LinkwayConfiguration.self, from: legacy)
+    #expect(decoded.pickerStyle == .tiles)
+    #expect(decoded == expected)
+}
+
+@Test func listPickerStyleRoundTrips() throws {
+    var configuration = sampleConfiguration()
+    configuration.pickerStyle = .list
+    let data = try JSONEncoder().encode(configuration)
+    #expect(try JSONDecoder().decode(LinkwayConfiguration.self, from: data) == configuration)
+}

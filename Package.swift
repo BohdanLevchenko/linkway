@@ -12,6 +12,7 @@ let package = Package(
         .target(name: "LinkwayCore"),
         .executableTarget(name: "Linkway", dependencies: ["LinkwayCore"]),
         .testTarget(name: "LinkwayCoreTests", dependencies: ["LinkwayCore"]),
+        .testTarget(name: "LinkwayTests", dependencies: ["Linkway"]),
     ],
     swiftLanguageModes: [.v6]
 )

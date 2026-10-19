@@ -9,6 +9,9 @@ final class PickerController: NSObject, NSWindowDelegate {
         let link: IncomingLink
         var destinations: [Destination]
         let rememberTargets: [RememberTarget]
+        let style: LinkwayCore.PickerStyle
+        let avatarProvider: @MainActor (Destination) -> NSImage?
+        let onOpenPreferences: @MainActor () -> Void
         let iconProvider: @MainActor (Destination) -> NSImage
         let completion: @MainActor (PickerResult) -> Void
     }
@@ -32,10 +35,14 @@ final class PickerController: NSObject, NSWindowDelegate {
         link: IncomingLink,
         destinations: [Destination],
         rememberTargets: [RememberTarget],
+        style: LinkwayCore.PickerStyle = .tiles,
+        avatarProvider: @escaping @MainActor (Destination) -> NSImage? = { _ in nil },
+        onOpenPreferences: @escaping @MainActor () -> Void = {},
         iconProvider: @escaping @MainActor (Destination) -> NSImage,
         completion: @escaping @MainActor (PickerResult) -> Void
     ) {
         queue.append(Request(link: link, destinations: destinations, rememberTargets: rememberTargets,
+                             style: style, avatarProvider: avatarProvider, onOpenPreferences: onOpenPreferences,
                              iconProvider: iconProvider, completion: completion))
         showNext()
     }
@@ -56,7 +63,7 @@ final class PickerController: NSObject, NSWindowDelegate {
         let request = queue.removeFirst()
         current = request
         previousApplication = NSWorkspace.shared.frontmostApplication
-        let model = PickerModel(link: request.link, destinations: request.destinations, rememberTargets: request.rememberTargets)
+        let model = PickerModel(link: request.link, destinations: request.destinations, rememberTargets: request.rememberTargets, style: request.style)
         model.onResult = { [weak self] result in self?.finish(result) }
         self.model = model
         let panel = PickerPanel(
@@ -73,7 +80,33 @@ final class PickerController: NSObject, NSWindowDelegate {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
-        panel.contentView = NSHostingView(rootView: PickerView(model: model, iconProvider: request.iconProvider))
+        let material = NSVisualEffectView()
+        material.material = .popover
+        material.blendingMode = .behindWindow
+        material.state = .active
+        material.wantsLayer = true
+        material.layer?.cornerRadius = TileMetrics.cornerRadius
+        material.layer?.masksToBounds = true
+        let hosting = NSHostingView(rootView: PickerRootView(
+            model: model, iconProvider: request.iconProvider, avatarProvider: request.avatarProvider,
+            onOpenPreferences: { [weak self] in
+                self?.finish(.dismissed)
+                request.onOpenPreferences()
+            }
+        ))
+        hosting.translatesAutoresizingMaskIntoConstraints = false
+        material.addSubview(hosting)
+        NSLayoutConstraint.activate([
+            hosting.leadingAnchor.constraint(equalTo: material.leadingAnchor),
+            hosting.trailingAnchor.constraint(equalTo: material.trailingAnchor),
+            hosting.topAnchor.constraint(equalTo: material.topAnchor),
+            hosting.bottomAnchor.constraint(equalTo: material.bottomAnchor),
+        ])
+        panel.contentView = material
+        model.onPresentationChange = { [weak self] in
+            guard let self, let panel = self.panel else { return }
+            self.place(panel)
+        }
         self.panel = panel
         place(panel)
         installEventMonitor()
@@ -89,7 +122,9 @@ final class PickerController: NSObject, NSWindowDelegate {
         guard let screen = NSScreen.screens.first(where: { $0.frame.contains(mouse) })
                 ?? NSScreen.main ?? NSScreen.screens.first else { return }
         let visible = screen.visibleFrame
-        let size = NSSize(width: min(420, visible.width), height: min(480, visible.height))
+        let desired = model?.presentation == .tiles
+            ? TileMetrics.panelSize(tileCount: model?.tiles.count ?? 0) : NSSize(width: 420, height: 480)
+        let size = NSSize(width: min(desired.width, visible.width), height: min(desired.height, visible.height))
         let origin = NSPoint(
             x: min(max(visible.midX - size.width / 2, visible.minX), visible.maxX - size.width),
             y: min(max(visible.midY - size.height / 2 + 55, visible.minY), visible.maxY - size.height)
@@ -110,9 +145,29 @@ final class PickerController: NSObject, NSWindowDelegate {
         }
     }
 
-    private func handleKey(_ event: NSEvent, model: PickerModel) -> Bool {
+    func handleKey(_ event: NSEvent, model: PickerModel) -> Bool {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        if modifiers.intersection([.command, .control, .option]).isEmpty,
+        if model.presentation == .tiles {
+            guard modifiers.intersection([.control, .option]).isEmpty else { return false }
+            if let characters = event.characters(byApplyingModifiers: []),
+               let number = Int(characters), (1...9).contains(number) {
+                model.openTile(number - 1)
+                return true
+            }
+            if modifiers.contains(.command), event.charactersIgnoringModifiers?.lowercased() == "a",
+               model.tiles.contains(.allOptions) {
+                model.showAllOptions()
+                return true
+            }
+            if !modifiers.contains(.command) {
+                switch event.keyCode {
+                case 123, 126: model.moveSelection(by: -1); return true
+                case 124, 125: model.moveSelection(by: 1); return true
+                default: break
+                }
+            }
+        }
+        if model.presentation == .list, modifiers.intersection([.command, .control, .option]).isEmpty,
            let characters = event.characters(byApplyingModifiers: []),
            characters.count == 1, let number = Int(characters),
            (1...9).contains(number) || (number == 0 && model.prefix != nil) {
@@ -140,6 +195,7 @@ final class PickerController: NSObject, NSWindowDelegate {
 
     func windowDidResignKey(_ notification: Notification) {
         guard let window = notification.object as? NSWindow, window === panel else { return }
+        if model?.sharing == true { return }
         if ProcessInfo.processInfo.systemUptime - shownAt < focusGrace {
             if !retriedKey {
                 retriedKey = true

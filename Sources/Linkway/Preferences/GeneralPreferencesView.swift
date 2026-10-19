@@ -9,6 +9,15 @@ struct GeneralPreferencesView: View {
     var body: some View {
         Form {
             Section {
+                Picker("Picker style", selection: model.binding(to: \.pickerStyle)) {
+                    Text("Tiles").tag(PickerStyle.tiles)
+                    Text("List").tag(PickerStyle.list)
+                }
+                .pickerStyle(.segmented)
+                Text("Tiles show up to 6 destinations; favorites come first.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section {
                 Picker("Force picker modifier", selection: model.binding(to: \.forcePickerModifier)) {
                     Text("Option").tag(ModifierKey.option)
                     Text("Command").tag(ModifierKey.command)

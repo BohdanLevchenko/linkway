@@ -20,6 +20,7 @@ final class LinkRouter {
     private var canPersist = true
     private var lastSave: Task<Void, Never>?
 
+    var onOpenPreferences: (() -> Void)?
     var onConfigurationLoaded: ((LinkwayConfiguration) -> Void)?
     private var configurationObservers: [(LinkwayConfiguration) -> Void] = []
     private var destinationObservers: [() -> Void] = []
@@ -182,6 +183,9 @@ final class LinkRouter {
             link: link,
             destinations: pickerDestinations(for: link),
             rememberTargets: RuleSuggestion.rememberTargets(for: link),
+            style: configuration.pickerStyle,
+            avatarProvider: { [registry] in registry.avatar(for: $0) },
+            onOpenPreferences: { [weak self] in self?.onOpenPreferences?() },
             iconProvider: { [registry] in registry.icon(for: $0) },
             completion: { [weak self] result in
                 guard let self, case .open(let request, let remember) = result else { return }

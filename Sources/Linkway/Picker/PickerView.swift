@@ -65,8 +65,49 @@ enum PickerLayout {
     }
 }
 
+enum PickerPresentation { case tiles, list }
+
+enum PickerTile: Hashable {
+    case destination(Destination)
+    case allOptions
+}
+
 @MainActor
 final class PickerModel: ObservableObject {
+    @Published private(set) var presentation: PickerPresentation
+    @Published var selectedTile = 0
+    var onPresentationChange: (() -> Void)?
+    var sharing = false
+    var tiles: [PickerTile] {
+        let count = destinations.count > TileMetrics.capacity ? TileMetrics.capacity - 1 : destinations.count
+        return destinations.prefix(count).map(PickerTile.destination)
+            + (destinations.count > TileMetrics.capacity ? [.allOptions] : [])
+    }
+
+    func showAllOptions() {
+        guard tiles.contains(.allOptions) else { return }
+        clearPrefix()
+        presentation = .list
+        onPresentationChange?()
+    }
+
+    func openTile(_ index: Int) {
+        guard tiles.indices.contains(index) else { return }
+        switch tiles[index] {
+        case .destination(let destination): open(destination)
+        case .allOptions: showAllOptions()
+        }
+    }
+
+    var tileTitle: String {
+        switch link.kind {
+        case .mail: return "mailto: " + (link.url.path.removingPercentEncoding ?? link.url.path)
+        case .localFile: return link.url.lastPathComponent
+        case .web: return (link.url.host ?? "") + link.url.path
+        case .custom: return link.url.absoluteString
+        }
+    }
+
     let link: IncomingLink
     @Published private(set) var destinations: [Destination]
     @Published private(set) var rows: [PickerRow]
@@ -78,7 +119,8 @@ final class PickerModel: ObservableObject {
     @Published var shiftHeld = false
     var onResult: (@MainActor (PickerResult) -> Void)?
 
-    init(link: IncomingLink, destinations: [Destination], rememberTargets: [RememberTarget] = []) {
+    init(link: IncomingLink, destinations: [Destination], rememberTargets: [RememberTarget] = [], style: LinkwayCore.PickerStyle = .list) {
+        presentation = style == .tiles ? .tiles : .list
         self.link = link
         self.destinations = destinations
         rows = PickerLayout.rows(for: destinations)
@@ -98,16 +140,22 @@ final class PickerModel: ObservableObject {
 
     func updateDestinations(_ destinations: [Destination]) {
         clearPrefix()
+        selectedTile = 0
         self.destinations = destinations
         rows = PickerLayout.rows(for: destinations)
         if !destinations.contains(where: { $0.id == selectedID }) {
             selectedID = destinations.first?.id
         }
+        onPresentationChange?()
     }
 
     private var selectableDestinations: [Destination] { rows.compactMap(\.destination) }
 
     func moveSelection(by offset: Int) {
+        if presentation == .tiles {
+            selectedTile = min(max(selectedTile + offset, 0), max(tiles.count - 1, 0))
+            return
+        }
         let destinations = selectableDestinations
         guard !destinations.isEmpty else { return }
         let index = destinations.firstIndex(where: { $0.id == selectedID }) ?? 0
@@ -115,6 +163,7 @@ final class PickerModel: ObservableObject {
     }
 
     func openSelected() {
+        if presentation == .tiles { openTile(selectedTile); return }
         guard let destination = destinations.first(where: { $0.id == selectedID }) else { return }
         open(destination)
     }

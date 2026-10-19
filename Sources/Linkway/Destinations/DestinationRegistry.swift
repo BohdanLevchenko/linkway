@@ -18,6 +18,8 @@ final class DestinationRegistry {
 
     private var index: [DestinationID: Destination] = [:]
     private var icons: [URL: NSImage] = [:]
+    private var avatars: [URL: NSImage] = [:]
+    private var missingAvatars: Set<URL> = []
     private var watcher: FileSystemWatcher?
     private var generation = 0
     private let logger = Logger(subsystem: ownBundleID, category: "destinations")
@@ -52,12 +54,26 @@ final class DestinationRegistry {
         return icon
     }
 
+    func avatar(for destination: Destination) -> NSImage? {
+        guard let url = destination.avatarURL else { return nil }
+        if let cached = avatars[url] { return cached }
+        guard !missingAvatars.contains(url) else { return nil }
+        guard let image = NSImage(contentsOf: url) else {
+            missingAvatars.insert(url)
+            return nil
+        }
+        avatars[url] = image
+        return image
+    }
+
     private func apply(_ snapshot: DestinationDiscovery.Snapshot) {
         if watcher?.paths != snapshot.watchPaths {
             watcher = FileSystemWatcher(paths: snapshot.watchPaths, latency: 1.0) { [weak self] _ in
                 self?.refresh()
             }
         }
+        avatars.removeAll()
+        missingAvatars.removeAll()
         let resolvable = Dictionary(snapshot.resolvable.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         guard !hasLoaded || snapshot.destinations != destinations || resolvable != index else { return }
         hasLoaded = true
@@ -128,10 +144,12 @@ enum DestinationDiscovery {
             let known = BrowserCatalog.browser(for: app.bundleID)
             let supportsPrivate = known?.privateWindowArgument != nil
             var profiles: [ChromiumProfile] = []
+            var userData: URL?
             if case let .chromium(userDataPath)? = known?.enabledProfileAdapter {
                 let localState = supportDirectory
                     .appending(path: userDataPath, directoryHint: .isDirectory)
                     .appending(path: ChromiumLocalState.fileName)
+                userData = localState.deletingLastPathComponent()
                 // FSEvents also reports a file that does not exist yet, e.g. before the first browser run.
                 watchPaths.append(localState.path)
                 profiles = chromiumProfiles(at: localState)
@@ -144,7 +162,10 @@ enum DestinationDiscovery {
                 Destination(
                     id: DestinationID(bundleID: app.bundleID, profileKey: profile.directory),
                     kind: .browser, appName: app.name, profileName: profile.displayName,
-                    appURL: app.url, supportsPrivateWindow: supportsPrivate
+                    appURL: app.url, supportsPrivateWindow: supportsPrivate,
+                    avatarURL: profile.pictureFileName.flatMap { file in
+                        userData?.appending(path: profile.directory).appending(path: file)
+                    }, highlightColorARGB: profile.highlightColorARGB
                 )
             }
             destinations += profileDestinations.count >= 2 ? profileDestinations : [browserLevel]

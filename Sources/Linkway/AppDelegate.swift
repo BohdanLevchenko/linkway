@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusMenu = StatusMenu(ingress: ingress, router: router, defaultHandlers: defaultHandlers)
         let preferences = PreferencesWindowController(router: router)
         preferencesWindowController = preferences
+        router.onOpenPreferences = { [weak preferences] in preferences?.show() }
         statusMenu?.onOpenPreferences = { [weak preferences] in preferences?.show() }
         let onboarding = OnboardingWindowController(handlers: defaultHandlers, router: router) {
             [weak preferences] in preferences?.show()
