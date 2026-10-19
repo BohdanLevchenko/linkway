@@ -5,9 +5,19 @@ import LinkwayCore
 
 struct GeneralPreferencesView: View {
     @ObservedObject var model: PreferencesModel
+    @ObservedObject var handlers: DefaultHandlers
+    let showWelcomeGuide: () -> Void
+    @State private var handlerStatusRevision = 0
 
     var body: some View {
         Form {
+            Section("Default apps") {
+                defaultAppRow("Web links", role: .browser)
+                defaultAppRow("Mail links", role: .mail)
+                Text("macOS asks to confirm. To stop using Linkway, pick another browser in System Settings → Desktop & Dock.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button("Show Welcome Guide…", action: showWelcomeGuide)
+            }
             Section {
                 Picker("Picker style", selection: model.binding(to: \.pickerStyle)) {
                     Text("Tiles").tag(PickerStyle.tiles)
@@ -49,9 +59,34 @@ struct GeneralPreferencesView: View {
             }
         }
         .formStyle(.grouped)
-        .onAppear { model.refreshLoginStatus() }
+        .onAppear {
+            model.refreshLoginStatus()
+            handlerStatusRevision += 1
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             model.refreshLoginStatus()
+            handlerStatusRevision += 1
         }
+    }
+
+    private func defaultAppRow(_ title: String, role: HandlerRole) -> some View {
+        LabeledContent(title) {
+            if handlers.isDefault(role) {
+                Label("Linkway", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            } else {
+                HStack {
+                    Text(handlers.currentHandlerName(role)).foregroundStyle(.secondary)
+                    Button("Use Linkway") {
+                        Task {
+                            _ = await handlers.makeDefault(role)
+                            handlerStatusRevision += 1
+                        }
+                    }
+                    .disabled(handlers.isWorking)
+                }
+            }
+        }
+        .id(handlerStatusRevision)
     }
 }

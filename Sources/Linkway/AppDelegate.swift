@@ -19,7 +19,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusMenu = StatusMenu(ingress: ingress, router: router, defaultHandlers: defaultHandlers)
-        let preferences = PreferencesWindowController(router: router)
+        let preferences = PreferencesWindowController(router: router, handlers: defaultHandlers) { [weak self] in
+            self?.onboardingWindowController?.show()
+        }
         preferencesWindowController = preferences
         router.onOpenPreferences = { [weak preferences] in preferences?.show() }
         statusMenu?.onOpenPreferences = { [weak preferences] in preferences?.show() }
@@ -27,7 +29,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             [weak preferences] in preferences?.show()
         }
         onboardingWindowController = onboarding
-        statusMenu?.onOpenSetup = { [weak onboarding] in onboarding?.show() }
         router.onConfigurationLoaded = { [ingress, router] configuration in
             ingress.forcePickerModifier = configuration.forcePickerModifier.eventFlag
             ingress.onLink = { link in router.handle(link) }

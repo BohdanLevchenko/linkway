@@ -4,12 +4,13 @@ import LinkwayCore
 @MainActor
 final class StatusMenu: NSObject, NSMenuDelegate {
     var onOpenPreferences: (() -> Void)?
-    var onOpenSetup: (() -> Void)?
     private let ingress: LinkIngress
     private let router: LinkRouter
     private let rememberedItem = NSMenuItem(title: "Remembered Choices", action: nil, keyEquivalent: "")
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let defaultBrowserItem = NSMenuItem()
+    private lazy var makeDefaultItem = item("Make Linkway Default Browser…", action: #selector(makeDefaultBrowser))
+    private let defaultBrowserSeparator = NSMenuItem.separator()
     private let defaultHandlers: DefaultHandlers
 
     init(ingress: LinkIngress, router: LinkRouter, defaultHandlers: DefaultHandlers) {
@@ -18,20 +19,24 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         self.router = router
         super.init()
 
-        statusItem.button?.title = "Linkway"
+        if let button = statusItem.button {
+            let icon = NSImage(systemSymbolName: "arrow.triangle.branch", accessibilityDescription: "Linkway")
+            icon?.isTemplate = true
+            button.image = icon
+            button.toolTip = "Linkway"
+        }
         let menu = NSMenu()
         menu.autoenablesItems = false
         menu.delegate = self
         menu.addItem(item("Open Link from Clipboard", action: #selector(openClipboard)))
         defaultBrowserItem.isEnabled = false
         menu.addItem(defaultBrowserItem)
-        menu.addItem(item("Make Linkway Default Browser...", action: #selector(makeDefaultBrowser)))
-        menu.addItem(.separator())
+        menu.addItem(makeDefaultItem)
+        menu.addItem(defaultBrowserSeparator)
         rememberedItem.submenu = NSMenu()
         menu.addItem(rememberedItem)
         menu.addItem(.separator())
-        menu.addItem(item("Setup…", action: #selector(openSetup)))
-        menu.addItem(item("Preferences…", action: #selector(openPreferences), keyEquivalent: ","))
+        menu.addItem(item("Settings…", action: #selector(openPreferences), keyEquivalent: ","))
         menu.addItem(item("Quit Linkway", action: #selector(quit), keyEquivalent: "q"))
         statusItem.menu = menu
         refreshDefaultBrowser()
@@ -74,8 +79,13 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         return item
     }
 
+    /// Only offered while another app is the default browser.
     private func refreshDefaultBrowser() {
+        let isDefault = defaultHandlers.isDefault(.browser)
         defaultBrowserItem.title = "Default Browser: \(defaultHandlers.currentHandlerName(.browser))"
+        defaultBrowserItem.isHidden = isDefault
+        makeDefaultItem.isHidden = isDefault
+        defaultBrowserSeparator.isHidden = isDefault
     }
 
     @objc private func openClipboard() {
@@ -104,10 +114,6 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         alert.informativeText = message
         NSApplication.shared.activate(ignoringOtherApps: true)
         alert.runModal()
-    }
-
-    @objc private func openSetup() {
-        onOpenSetup?()
     }
 
     @objc private func openPreferences() {

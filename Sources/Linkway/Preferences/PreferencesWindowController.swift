@@ -5,7 +5,7 @@ import SwiftUI
 final class PreferencesWindowController: NSWindowController {
     private let model: PreferencesModel
 
-    init(router: LinkRouter) {
+    init(router: LinkRouter, handlers: DefaultHandlers, showWelcomeGuide: @escaping () -> Void) {
         model = PreferencesModel(router: router)
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 720, height: 520),
@@ -14,7 +14,9 @@ final class PreferencesWindowController: NSWindowController {
         )
         window.title = "Linkway Settings"
         window.isReleasedWhenClosed = false
-        window.contentViewController = NSHostingController(rootView: PreferencesView(model: model))
+        window.contentViewController = NSHostingController(rootView: PreferencesView(
+            model: model, handlers: handlers, showWelcomeGuide: showWelcomeGuide
+        ))
         window.minSize = NSSize(width: 640, height: 460)
         window.center()
         super.init(window: window)
@@ -31,10 +33,12 @@ final class PreferencesWindowController: NSWindowController {
 
 private struct PreferencesView: View {
     @ObservedObject var model: PreferencesModel
+    let handlers: DefaultHandlers
+    let showWelcomeGuide: () -> Void
 
     var body: some View {
         TabView {
-            GeneralPreferencesView(model: model)
+            GeneralPreferencesView(model: model, handlers: handlers, showWelcomeGuide: showWelcomeGuide)
                 .tabItem { Label("General", systemImage: "gearshape") }
             DestinationPreferencesView(model: model, kind: .browser)
                 .tabItem { Label("Browsers", systemImage: "globe") }
