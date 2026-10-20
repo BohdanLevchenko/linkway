@@ -14,6 +14,7 @@ public enum PickerStyle: String, Codable, Sendable, Hashable, CaseIterable {
 
 public struct LinkwayConfiguration: Codable, Sendable, Hashable {
     public static let currentSchemaVersion = 1
+    public var urlProcessing: URLProcessingSettings
     public var schemaVersion: Int
     public var rules: [Rule]
     public var fallbacks: FallbackPolicies
@@ -28,8 +29,9 @@ public struct LinkwayConfiguration: Codable, Sendable, Hashable {
         rules: [Rule] = [], fallbacks: FallbackPolicies = FallbackPolicies(),
         destinationOrder: [DestinationID] = [], hiddenDestinations: Set<DestinationID> = [],
         favoriteDestinations: [DestinationID] = [], forcePickerModifier: ModifierKey = .option,
-        pickerStyle: PickerStyle = .tiles
+        pickerStyle: PickerStyle = .tiles, urlProcessing: URLProcessingSettings = .init()
     ) {
+        self.urlProcessing = urlProcessing
         self.pickerStyle = pickerStyle
         self.schemaVersion = schemaVersion
         self.rules = rules
@@ -41,12 +43,14 @@ public struct LinkwayConfiguration: Codable, Sendable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
+        case urlProcessing
         case schemaVersion, rules, fallbacks, destinationOrder, hiddenDestinations
         case favoriteDestinations, forcePickerModifier, pickerStyle
     }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        urlProcessing = try values.decodeIfPresent(URLProcessingSettings.self, forKey: .urlProcessing) ?? .init()
         schemaVersion = try values.decode(Int.self, forKey: .schemaVersion)
         rules = try values.decode([Rule].self, forKey: .rules)
         fallbacks = try values.decode(FallbackPolicies.self, forKey: .fallbacks)
