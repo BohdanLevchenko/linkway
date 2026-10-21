@@ -37,6 +37,17 @@ public struct RuleEvaluation: Sendable, Hashable {
 }
 
 public struct RoutingExplanation: Sendable, Hashable {
+    public let processedURL: URL?
+    public let removedParameters: [String]
+    public let wouldExpandShortLink: Bool
+    public init(evaluations: [RuleEvaluation], decision: RoutingDecision, processedURL: URL? = nil,
+                removedParameters: [String] = [], wouldExpandShortLink: Bool = false) {
+        self.evaluations = evaluations
+        self.decision = decision
+        self.processedURL = processedURL
+        self.removedParameters = removedParameters
+        self.wouldExpandShortLink = wouldExpandShortLink
+    }
     public let evaluations: [RuleEvaluation]
     public let decision: RoutingDecision
 }

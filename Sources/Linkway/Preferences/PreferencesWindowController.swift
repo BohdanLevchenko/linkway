@@ -3,22 +3,28 @@ import SwiftUI
 
 @MainActor
 final class PreferencesWindowController: NSWindowController {
+    private static let defaultSize = NSSize(width: 720, height: 520)
+    private static let minimumSize = NSSize(width: 640, height: 460)
     private let model: PreferencesModel
 
     init(router: LinkRouter, handlers: DefaultHandlers, showWelcomeGuide: @escaping () -> Void) {
         model = PreferencesModel(router: router)
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 720, height: 520),
+            contentRect: NSRect(origin: .zero, size: Self.defaultSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false
         )
         window.title = "Linkway Settings"
         window.isReleasedWhenClosed = false
-        window.contentViewController = NSHostingController(rootView: PreferencesView(
+        let hosting = NSHostingController(rootView: PreferencesView(
             model: model, handlers: handlers, showWelcomeGuide: showWelcomeGuide
         ))
-        window.minSize = NSSize(width: 640, height: 460)
-        window.center()
+        hosting.sizingOptions = []
+        window.contentViewController = hosting
+        window.setContentSize(Self.defaultSize)
+        window.contentMinSize = Self.minimumSize
+        window.setFrameAutosaveName("LinkwaySettings")
+        if !window.setFrameUsingName("LinkwaySettings") { window.center() }
         super.init(window: window)
     }
 
@@ -44,6 +50,8 @@ private struct PreferencesView: View {
                 .tabItem { Label("Browsers", systemImage: "globe") }
             DestinationPreferencesView(model: model, kind: .mailClient)
                 .tabItem { Label("Mail", systemImage: "envelope") }
+            LinksPreferencesView(model: model)
+                .tabItem { Label("Links", systemImage: "link") }
             RulesPreferencesView(model: model)
                 .tabItem { Label("Rules", systemImage: "list.bullet") }
             RoutingTestView(model: model)

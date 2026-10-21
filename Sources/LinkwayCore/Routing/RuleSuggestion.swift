@@ -8,20 +8,20 @@ public enum RuleSuggestion {
 
     /// Scopes a picker choice can be remembered for, broad to narrow: the site, then each leading path segment
     /// (up to `maxPathDepth`). Empty when the link has nothing stable to key on.
-    public static func rememberTargets(for link: IncomingLink, maxPathDepth: Int = 2) -> [RememberTarget] {
+    public static func rememberTargets(for link: IncomingLink, maxPathDepth: Int = 2, matchTarget: MatchTarget = .processed) -> [RememberTarget] {
         switch link.kind {
         case .web:
             guard let host = siteHost(link.url) else { return [] }
             let path = URLComponents(url: link.url, resolvingAgainstBaseURL: false)?.percentEncodedPath ?? ""
             let segments = path.split(separator: "/").prefix(maxPathDepth)
             let paths = segments.indices.map { "/" + segments[...$0].joined(separator: "/") }
-            return [RememberTarget(label: host, condition: .hostIncludingSubdomains(host))] + paths.map {
-                RememberTarget(label: host + ($0.removingPercentEncoding ?? $0), condition: .sitePath(host: host, pathPrefix: $0))
+            return [RememberTarget(label: host, condition: .hostIncludingSubdomains(host), matchTarget: matchTarget)] + paths.map {
+                RememberTarget(label: host + ($0.removingPercentEncoding ?? $0), condition: .sitePath(host: host, pathPrefix: $0), matchTarget: matchTarget)
             }
         case .mail:
             let components = URLComponents(url: link.url, resolvingAgainstBaseURL: false)
             return URLMatcher.recipientDomains(components).first.flatMap(URLMatcher.normalizedHost).map {
-                [RememberTarget(label: "mail to \($0)", condition: .mailRecipientDomain($0))]
+                [RememberTarget(label: "mail to \($0)", condition: .mailRecipientDomain($0), matchTarget: matchTarget)]
             } ?? []
         case .localFile, .custom:
             return []
@@ -48,23 +48,25 @@ private extension RuleCondition {
 public struct RememberTarget: Sendable, Hashable {
     public let label: String
     public let condition: RuleCondition
+    public let matchTarget: MatchTarget
 
-    public init(label: String, condition: RuleCondition) {
+    public init(label: String, condition: RuleCondition, matchTarget: MatchTarget = .processed) {
         self.label = label
         self.condition = condition
+        self.matchTarget = matchTarget
     }
 
     public func rule(destination: DestinationID, privateWindow: Bool) -> Rule {
-        Rule(name: label, condition: condition, action: .open(destination, privateWindow: privateWindow), origin: .remembered)
+        Rule(name: label, condition: condition, action: .open(destination, privateWindow: privateWindow), matchTarget: matchTarget, origin: .remembered)
     }
 }
 
 extension LinkwayConfiguration {
-    /// A remembered choice is the user's latest explicit decision: it replaces any rule with the same condition
+    /// A remembered choice is the user's latest explicit decision: it replaces any rule with the same condition and match target
     /// and joins the leading block of remembered rules, ahead of manual ones. Within that block, narrower paths
     /// go first so github.com/antiwork beats github.com; among equals, the newest goes first.
     public mutating func remember(_ target: RememberTarget, destination: DestinationID, privateWindow: Bool) {
-        rules.removeAll { $0.condition == target.condition }
+        rules.removeAll { $0.condition == target.condition && $0.matchTarget == target.matchTarget }
         let rule = target.rule(destination: destination, privateWindow: privateWindow)
         let index = rules.firstIndex {
             $0.origin != .remembered || $0.condition.specificity <= rule.condition.specificity

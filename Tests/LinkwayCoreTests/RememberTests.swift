@@ -85,3 +85,30 @@ private func link(_ value: String) throws -> IncomingLink {
     let decoded = try JSONDecoder().decode(Rule.self, from: JSONSerialization.data(withJSONObject: json))
     #expect(decoded.origin == .manual)
 }
+
+@Test func rememberOriginalURLSurvivesProcessingAndRoundTrip() throws {
+    let original = try link("https://bit.ly/a")
+    let processed = try #require(URL(string: "https://example.com/article"))
+    let target = try #require(RuleSuggestion.rememberTargets(for: original, matchTarget: .original).first)
+    #expect(target.label == "bit.ly")
+    #expect(target.matchTarget == .original)
+    var configuration = LinkwayConfiguration()
+    configuration.remember(target, destination: chrome, privateWindow: false)
+    configuration = try JSONDecoder().decode(LinkwayConfiguration.self, from: JSONEncoder().encode(configuration))
+    #expect(configuration.rules.first?.matchTarget == .original)
+    let decision = RoutingEngine(rules: configuration.rules, fallbacks: configuration.fallbacks)
+        .decide(original, processedURL: processed, availableDestinations: [chrome])
+    guard case .launch(let request, _) = decision else { Issue.record("original remembered rule did not match"); return }
+    #expect(request.destination == chrome)
+}
+
+@Test func rememberReplacementIncludesMatchTarget() {
+    let condition = RuleCondition.hostIncludingSubdomains("bit.ly")
+    var configuration = LinkwayConfiguration()
+    configuration.remember(RememberTarget(label: "processed", condition: condition), destination: chrome, privateWindow: false)
+    configuration.remember(RememberTarget(label: "original", condition: condition, matchTarget: .original), destination: firefox, privateWindow: false)
+    configuration.remember(RememberTarget(label: "updated", condition: condition, matchTarget: .original), destination: chrome, privateWindow: true)
+    #expect(configuration.rules.count == 2)
+    #expect(configuration.rules.filter { $0.matchTarget == .processed }.first?.name == "processed")
+    #expect(configuration.rules.filter { $0.matchTarget == .original }.first?.action == .open(chrome, privateWindow: true))
+}

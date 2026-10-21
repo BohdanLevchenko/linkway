@@ -108,3 +108,53 @@ import Testing
     #expect(opened == picker.destinations[2].id)
     picker.clearPrefix()
 }
+
+@Test @MainActor func processedPickerLaunchesAndRemembersActiveURLInBothStyles() throws {
+    let original = URL(string: "https://bit.ly/a?utm_source=mail")!
+    let processed = URL(string: "https://example.com/articles/a")!
+    let link = IncomingLink(url: original, receivedAt: Date(), senderBundleID: "sender.app", forcePicker: true)
+    for style in [LinkwayCore.PickerStyle.tiles, .list] {
+        let model = PickerModel(link: link, destinations: samplePicker(count: 1).destinations, style: style,
+                                processing: .init(url: processed, removedParameters: ["utm_source"]), expanded: true)
+        #expect(model.title == "example.com")
+        #expect(model.tileTitle == "example.com/articles/a")
+        #expect(model.rememberTargets == RuleSuggestion.rememberTargets(for: model.link))
+        #expect(model.rememberTargets.first?.label == "example.com")
+        #expect(model.processingTooltip.contains(original.absoluteString))
+        #expect(model.processingTooltip.contains("utm_source"))
+        var opened: LaunchRequest?
+        var remembered: RememberTarget?
+        model.onResult = { if case .open(let request, let target) = $0 { opened = request; remembered = target } }
+        model.cycleRememberScope()
+        model.openSelected()
+        #expect(opened?.url == processed)
+        #expect(remembered == model.rememberTargets.first)
+        model.toggleOriginal()
+        #expect(model.rememberIndex == nil)
+        #expect(model.link.url == original)
+        #expect(model.link.senderBundleID == link.senderBundleID)
+        #expect(model.rememberTargets.first?.label == "bit.ly")
+        #expect(model.rememberTargets.first?.matchTarget == .original)
+        model.cycleRememberScope()
+        model.openSelected()
+        #expect(remembered?.matchTarget == .original)
+        #expect(opened?.url == original)
+        let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.command, .shift],
+                                                timestamp: 0, windowNumber: 0, context: nil, characters: "O",
+                                                charactersIgnoringModifiers: "o", isARepeat: false, keyCode: 31))
+        #expect(PickerController().handleKey(event, model: model))
+        #expect(model.link.url == processed)
+    }
+}
+
+@Test @MainActor func ruleTesterReportsOfflineProcessing() {
+    let router = LinkRouter(registry: DestinationRegistry(),
+                            store: ConfigurationStore(fileURL: URL(fileURLWithPath: "/tmp/unused-linkway-test-config")))
+    let explanation = router.explain(URL(string: "https://example.com/?q=keep&utm_source=drop")!, senderBundleID: nil)
+    #expect(explanation.processedURL?.absoluteString == "https://example.com/?q=keep")
+    #expect(explanation.removedParameters == ["utm_source"])
+    #expect(!explanation.wouldExpandShortLink)
+    #expect(router.explain(URL(string: "https://bit.ly/test")!, senderBundleID: nil).wouldExpandShortLink)
+    let mail = URL(string: "mailto:a@example.com?utm_source=keep")!
+    #expect(router.explain(mail, senderBundleID: nil).processedURL == mail)
+}

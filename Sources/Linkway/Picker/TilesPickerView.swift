@@ -67,6 +67,9 @@ private struct TilesPickerView: View {
                     .accessibilityLabel("Dismiss picker")
                     .padding(.leading, TileMetrics.padding)
                 }
+                .overlay(alignment: .trailing) {
+                    ProcessingIndicator(model: model).padding(.trailing, TileMetrics.padding)
+                }
             HStack(spacing: TileMetrics.spacing) {
                 ForEach(Array(model.tiles.enumerated()), id: \.offset) { index, tile in
                     tileButton(tile, index: index)

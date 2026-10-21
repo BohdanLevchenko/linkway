@@ -108,10 +108,31 @@ final class PickerModel: ObservableObject {
         }
     }
 
-    let link: IncomingLink
+    let originalLink: IncomingLink
+    let processing: CleanResult
+    let expanded: Bool
+    @Published private(set) var usesOriginal = false
+    var link: IncomingLink {
+        IncomingLink(url: usesOriginal ? originalLink.url : processing.url, receivedAt: originalLink.receivedAt,
+                     senderBundleID: originalLink.senderBundleID, forcePicker: originalLink.forcePicker)
+    }
+    var canToggleOriginal: Bool { processing.url != originalLink.url }
+    var processingTooltip: String {
+        "Original: " + originalLink.url.absoluteString
+            + (processing.removedParameters.isEmpty ? "" : "\nRemoved: " + processing.removedParameters.joined(separator: ", "))
+            + "\n" + (usesOriginal ? "Use processed URL" : "Use original URL") + " (⌘⇧O)"
+    }
+    func toggleOriginal() {
+        guard canToggleOriginal else { return }
+        usesOriginal.toggle()
+        rememberIndex = nil
+    }
     @Published private(set) var destinations: [Destination]
     @Published private(set) var rows: [PickerRow]
-    let rememberTargets: [RememberTarget]
+    private let initialRememberTargets: [RememberTarget]
+    var rememberTargets: [RememberTarget] {
+        canToggleOriginal ? RuleSuggestion.rememberTargets(for: link, matchTarget: usesOriginal ? .original : .processed) : initialRememberTargets
+    }
     @Published var rememberIndex: Int? = nil
     @Published private(set) var prefix: PickerShortcut?
     private var prefixTimeout: Task<Void, Never>?
@@ -119,12 +140,17 @@ final class PickerModel: ObservableObject {
     @Published var shiftHeld = false
     var onResult: (@MainActor (PickerResult) -> Void)?
 
-    init(link: IncomingLink, destinations: [Destination], rememberTargets: [RememberTarget] = [], style: LinkwayCore.PickerStyle = .list) {
+    init(
+        link: IncomingLink, destinations: [Destination], rememberTargets: [RememberTarget] = [],
+        style: LinkwayCore.PickerStyle = .list, processing: CleanResult? = nil, expanded: Bool = false
+    ) {
         presentation = style == .tiles ? .tiles : .list
-        self.link = link
+        self.originalLink = link
+        self.processing = processing ?? .init(url: link.url)
+        self.expanded = expanded
         self.destinations = destinations
         rows = PickerLayout.rows(for: destinations)
-        self.rememberTargets = rememberTargets
+        self.initialRememberTargets = rememberTargets
         selectedID = destinations.first?.id
     }
 
@@ -169,7 +195,7 @@ final class PickerModel: ObservableObject {
     }
 
     var currentTarget: RememberTarget? {
-        rememberIndex.map { rememberTargets[$0] }
+        rememberIndex.flatMap { rememberTargets.indices.contains($0) ? rememberTargets[$0] : nil }
     }
 
     func cycleRememberScope() {
@@ -322,6 +348,7 @@ struct PickerView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             HStack(alignment: .top, spacing: 12) {
+                ProcessingIndicator(model: model)
                 Text(model.title)
                     .font(.title3.bold())
                     .lineLimit(2)
@@ -466,5 +493,21 @@ struct PickerView: View {
         .accessibilityLabel(destination.displayName + (shortcut.map { ", shortcut \($0.label)" } ?? ""))
         .accessibilityValue(selected ? "Selected" : "")
         .accessibilityHint(destination.supportsPrivateWindow ? "Hold Shift to open in a private window" : "Open link")
+    }
+}
+
+
+struct ProcessingIndicator: View {
+    @ObservedObject var model: PickerModel
+    var body: some View {
+        if model.canToggleOriginal {
+            Button(action: model.toggleOriginal) {
+                Image(systemName: model.expanded ? "arrow.up.right" : "wand.and.stars")
+                    .foregroundStyle(model.usesOriginal ? Color.secondary : Color.accentColor)
+            }
+            .buttonStyle(.plain)
+            .help(model.processingTooltip)
+            .accessibilityLabel(model.usesOriginal ? "Use processed URL" : "Use original URL")
+        }
     }
 }

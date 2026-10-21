@@ -4,7 +4,7 @@ import os
 
 @MainActor
 final class LinkRouter {
-    private static let bounceWindow: TimeInterval = 3
+    private static let resolvingHUDDelay: Duration = .milliseconds(800)
 
     private let registry: DestinationRegistry
     private let store: ConfigurationStore
@@ -15,7 +15,12 @@ final class LinkRouter {
     private(set) var configuration: LinkwayConfiguration = .default
     private var configurationLoaded = false
     private var pending: [IncomingLink] = []
-    private var recentLaunches: [String: Date] = [:]
+    private var pickerRequests = 0
+    private var launchesInFlight = 0
+    private var resolutionID: UUID?
+    private var resolutionTask: Task<Void, Never>?
+    private let resolvingPanel = ResolvingLinkController()
+    private var bounceBacks = BounceBackTracker()
     /// False when the file on disk exists but could not be read; saving then would overwrite it with defaults.
     private var canPersist = true
     private var lastSave: Task<Void, Never>?
@@ -48,7 +53,7 @@ final class LinkRouter {
     }
 
     func handle(_ link: IncomingLink) {
-        pending.append(link)
+        pending.append(bounceBacks.isBounceBack(link) ? link.forcingPicker() : link)
         drain()
     }
 
@@ -102,8 +107,13 @@ final class LinkRouter {
     /// Dry run of routing for the rule tester; never launches anything.
     func explain(_ url: URL, senderBundleID: String?) -> RoutingExplanation {
         let link = IncomingLink(url: url, receivedAt: Date(), senderBundleID: senderBundleID, forcePicker: false)
-        return RoutingEngine(rules: configuration.rules, fallbacks: configuration.fallbacks)
-            .explain(link, processedURL: url, availableDestinations: registry.availableIDs)
+        let settings = configuration.urlProcessing
+        let cleaned = TrackingCleaner(settings: settings).clean(url)
+        let explanation = RoutingEngine(rules: configuration.rules, fallbacks: configuration.fallbacks)
+            .explain(link, processedURL: cleaned.url, availableDestinations: registry.availableIDs)
+        return RoutingExplanation(evaluations: explanation.evaluations, decision: explanation.decision,
+                                  processedURL: cleaned.url, removedParameters: cleaned.removedParameters,
+                                  wouldExpandShortLink: ShortLinkResolver(settings: settings).isShortLink(url))
     }
 
     private func notifyConfigurationChanged() {
@@ -141,7 +151,7 @@ final class LinkRouter {
 
     private func drain() {
         guard isReady else { return }
-        while !pending.isEmpty {
+        while resolutionID == nil && pickerRequests == 0 && launchesInFlight == 0 && !pending.isEmpty {
             route(pending.removeFirst())
         }
     }
@@ -153,34 +163,71 @@ final class LinkRouter {
     }
 
     private func route(_ link: IncomingLink) {
+        let settings = configuration.urlProcessing
+        let resolver = ShortLinkResolver(settings: settings)
+        guard link.kind == .web, settings.expandShortLinks, resolver.isShortLink(link.url) else {
+            finishRouting(link, processing: TrackingCleaner(settings: settings).clean(link.url))
+            return
+        }
+        let id = UUID()
+        resolutionID = id
+        let delayedHUD = Task { [weak self] in
+            do { try await Task.sleep(for: Self.resolvingHUDDelay) } catch { return }
+            guard let self, resolutionID == id else { return }
+            resolvingPanel.show(url: link.url) { [weak self] in
+                guard let self, resolutionID == id else { return }
+                resolutionID = nil
+                resolutionTask?.cancel()
+                resolutionTask = nil
+                logger.info("Short link cancelled by user")
+                resolvingPanel.close()
+                finishRouting(link, processing: .init(url: link.url))
+                drain()
+            }
+        }
+        resolutionTask = Task { [weak self] in
+            let result = await resolver.resolve(link.url)
+            delayedHUD.cancel()
+            guard let self, resolutionID == id else { return }
+            resolutionID = nil
+            resolutionTask = nil
+            resolvingPanel.close()
+            let expanded = result.outcome == .expanded
+            switch result.outcome {
+            case .expanded: logger.info("Short link expanded; hops=\(result.hops.count, privacy: .public)")
+            case .failed: logger.info("Short link failed")
+            case .cancelled: logger.info("Short link cancelled")
+            case .notShortLink: logger.info("Not a short link")
+            }
+            finishRouting(link, processing: TrackingCleaner(settings: settings).clean(expanded ? result.url : link.url),
+                          expanded: expanded)
+            drain()
+        }
+    }
+
+    private func finishRouting(_ link: IncomingLink, processing: CleanResult, expanded: Bool = false) {
         let engine = RoutingEngine(rules: configuration.rules, fallbacks: configuration.fallbacks)
         let decision = engine.decide(
-            isBounceBack(link) ? link.forcingPicker() : link,
-            processedURL: link.url,
+            link,
+            processedURL: processing.url,
             availableDestinations: registry.availableIDs
         )
-        logger.info("Routing \(String(describing: link.kind), privacy: .public) link: \(String(describing: decision), privacy: .public)")
+        logger.info("URL processing removed \(processing.removedParameters.count, privacy: .public) parameters")
         switch decision {
         case .launch(let request, _):
-            launch(request, for: link)
+            logger.info("Routing to destination")
+            launch(request, for: link, processing: processing, expanded: expanded)
         case .showPicker:
-            showPicker(for: link)
+            logger.info("Routing to picker")
+            showPicker(for: link, processing: processing, expanded: expanded)
         }
     }
 
-    /// A link coming straight back from the app we just launched means that app handed it to the
-    /// default handler again; re-applying the same rule would loop.
-    private func isBounceBack(_ link: IncomingLink) -> Bool {
-        guard let sender = link.senderBundleID, let launchedAt = recentLaunches[sender.lowercased()] else {
-            return false
-        }
-        let elapsed = link.receivedAt.timeIntervalSince(launchedAt)
-        return elapsed >= 0 && elapsed < Self.bounceWindow
-    }
-
-    private func showPicker(for link: IncomingLink) {
+    private func showPicker(for link: IncomingLink, processing: CleanResult, expanded: Bool = false) {
+        pickerRequests += 1
         picker.present(
             link: link,
+            processing: processing, expanded: expanded,
             destinations: pickerDestinations(for: link),
             rememberTargets: RuleSuggestion.rememberTargets(for: link),
             style: configuration.pickerStyle,
@@ -188,26 +235,28 @@ final class LinkRouter {
             onOpenPreferences: { [weak self] in self?.onOpenPreferences?() },
             iconProvider: { [registry] in registry.icon(for: $0) },
             completion: { [weak self] result in
-                guard let self, case .open(let request, let remember) = result else { return }
+                guard let self else { return }
+                pickerRequests -= 1
+                defer { drain() }
+                guard case .open(let request, let remember) = result else { return }
                 if let remember {
                     updateConfiguration { $0.remember(remember, destination: request.destination, privateWindow: request.privateWindow) }
                 }
-                launch(request, for: link)
+                launch(request, for: link, processing: processing, expanded: expanded)
             }
         )
     }
 
-    private func launch(_ request: LaunchRequest, for link: IncomingLink) {
-        let now = Date()
-        recentLaunches = recentLaunches.filter { now.timeIntervalSince($0.value) < Self.bounceWindow }
-        recentLaunches[request.destination.bundleID.lowercased()] = now
+    private func launch(_ request: LaunchRequest, for link: IncomingLink, processing: CleanResult, expanded: Bool) {
+        bounceBacks.recordLaunch(bundleID: request.destination.bundleID, startedAt: Date())
+        launchesInFlight += 1
         Task {
+            defer { launchesInFlight -= 1; drain() }
             do {
                 try await launcher.open(request, registry: registry)
-                recentLaunches[request.destination.bundleID.lowercased()] = Date()
             } catch {
-                logger.error("Launch failed for \(request.destination, privacy: .public): \(String(describing: error), privacy: .public)")
-                showPicker(for: link)
+                logger.error("Launch failed")
+                showPicker(for: link, processing: processing, expanded: expanded)
             }
         }
     }

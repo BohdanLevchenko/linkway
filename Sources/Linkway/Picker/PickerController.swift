@@ -7,6 +7,8 @@ import os
 final class PickerController: NSObject, NSWindowDelegate {
     private struct Request {
         let link: IncomingLink
+        let processing: CleanResult?
+        let expanded: Bool
         var destinations: [Destination]
         let rememberTargets: [RememberTarget]
         let style: LinkwayCore.PickerStyle
@@ -33,6 +35,7 @@ final class PickerController: NSObject, NSWindowDelegate {
 
     func present(
         link: IncomingLink,
+        processing: CleanResult? = nil, expanded: Bool = false,
         destinations: [Destination],
         rememberTargets: [RememberTarget],
         style: LinkwayCore.PickerStyle = .tiles,
@@ -41,7 +44,7 @@ final class PickerController: NSObject, NSWindowDelegate {
         iconProvider: @escaping @MainActor (Destination) -> NSImage,
         completion: @escaping @MainActor (PickerResult) -> Void
     ) {
-        queue.append(Request(link: link, destinations: destinations, rememberTargets: rememberTargets,
+        queue.append(Request(link: link, processing: processing, expanded: expanded, destinations: destinations, rememberTargets: rememberTargets,
                              style: style, avatarProvider: avatarProvider, onOpenPreferences: onOpenPreferences,
                              iconProvider: iconProvider, completion: completion))
         showNext()
@@ -63,7 +66,7 @@ final class PickerController: NSObject, NSWindowDelegate {
         let request = queue.removeFirst()
         current = request
         previousApplication = NSWorkspace.shared.frontmostApplication
-        let model = PickerModel(link: request.link, destinations: request.destinations, rememberTargets: request.rememberTargets, style: request.style)
+        let model = PickerModel(link: request.link, destinations: request.destinations, rememberTargets: request.rememberTargets, style: request.style, processing: request.processing, expanded: request.expanded)
         model.onResult = { [weak self] result in self?.finish(result) }
         self.model = model
         let panel = PickerPanel(
@@ -147,6 +150,10 @@ final class PickerController: NSObject, NSWindowDelegate {
 
     func handleKey(_ event: NSEvent, model: PickerModel) -> Bool {
         let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if modifiers.contains([.command, .shift]), event.charactersIgnoringModifiers?.lowercased() == "o" {
+            model.toggleOriginal()
+            return true
+        }
         if model.presentation == .tiles {
             guard modifiers.intersection([.control, .option]).isEmpty else { return false }
             if let characters = event.characters(byApplyingModifiers: []),
@@ -215,7 +222,7 @@ final class PickerController: NSObject, NSWindowDelegate {
         if !explicitUserResult {
             logger.debug("Completing request without explicit picker result: click-away after focus grace period")
         }
-        logger.info("Finished: \(String(describing: result), privacy: .public)")
+        logger.info("Picker finished")
         transitioning = true
         current = nil
         if let eventMonitor { NSEvent.removeMonitor(eventMonitor) }

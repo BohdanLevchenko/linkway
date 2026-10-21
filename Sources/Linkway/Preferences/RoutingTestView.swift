@@ -15,10 +15,19 @@ struct RoutingTestView: View {
                 .accessibilityLabel("URL to test")
             TextField("Sender app bundle ID (optional)", text: $sender).onSubmit { test() }
             Button("Test", action: test).keyboardShortcut(.return, modifiers: [])
-            Text("Tests the current rules without opening the link. URL processing is not currently applied.")
+            Text("Tests the current rules with offline URL cleaning, without opening the link.")
                 .font(.caption).foregroundStyle(.secondary)
             if let error { Text(error).foregroundStyle(.red) }
             if let explanation {
+                if let processed = explanation.processedURL, processed.absoluteString != input.trimmingCharacters(in: .whitespacesAndNewlines) {
+                    Text("Processed: " + processed.absoluteString).font(.caption).textSelection(.enabled)
+                    if !explanation.removedParameters.isEmpty {
+                        Text("Removed: " + explanation.removedParameters.joined(separator: ", ")).font(.caption)
+                    }
+                }
+                if explanation.wouldExpandShortLink {
+                    Text("Short link: would be expanded when opened").font(.caption).foregroundStyle(.secondary)
+                }
                 Text(decisionText(explanation.decision)).font(.headline).textSelection(.enabled)
                 List(Array(explanation.evaluations.enumerated()), id: \.offset) { _, evaluation in
                     VStack(alignment: .leading, spacing: 4) {

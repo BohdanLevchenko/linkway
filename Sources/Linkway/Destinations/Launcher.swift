@@ -38,7 +38,7 @@ final class Launcher {
         } catch let error as LaunchError {
             throw error
         } catch {
-            logger.error("Launch of \(destination.id, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+            logger.error("Destination launch failed")
             throw .launchFailed(error.localizedDescription)
         }
     }

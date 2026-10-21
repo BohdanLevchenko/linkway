@@ -3,6 +3,11 @@ import ServiceManagement
 import SwiftUI
 import LinkwayCore
 
+private struct HandlerRowID: Hashable {
+    let role: HandlerRole
+    let revision: Int
+}
+
 struct GeneralPreferencesView: View {
     @ObservedObject var model: PreferencesModel
     @ObservedObject var handlers: DefaultHandlers
@@ -87,6 +92,6 @@ struct GeneralPreferencesView: View {
                 }
             }
         }
-        .id(handlerStatusRevision)
+        .id(HandlerRowID(role: role, revision: handlerStatusRevision))
     }
 }
