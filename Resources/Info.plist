@@ -42,7 +42,7 @@
             <key>CFBundleTypeRole</key>
             <string>Viewer</string>
             <key>CFBundleURLSchemes</key>
-            <array><string>linkway</string></array>
+            <array><string>linkway</string><string>x-choosy</string></array>
         </dict>
     </array>
     <key>CFBundleDocumentTypes</key>

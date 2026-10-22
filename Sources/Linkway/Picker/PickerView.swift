@@ -114,7 +114,7 @@ final class PickerModel: ObservableObject {
     @Published private(set) var usesOriginal = false
     var link: IncomingLink {
         IncomingLink(url: usesOriginal ? originalLink.url : processing.url, receivedAt: originalLink.receivedAt,
-                     senderBundleID: originalLink.senderBundleID, forcePicker: originalLink.forcePicker)
+                     senderBundleID: originalLink.senderBundleID, forcePicker: originalLink.forcePicker, mode: originalLink.mode)
     }
     var canToggleOriginal: Bool { processing.url != originalLink.url }
     var processingTooltip: String {

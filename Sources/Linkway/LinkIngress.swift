@@ -18,6 +18,7 @@ final class LinkIngress: NSObject {
         let receivedAt: Date
         let senderBundleID: String?
         let modifiers: NSEvent.ModifierFlags
+        let mode: SchemeCommand.Mode
     }
 
     private var pending: [Arrival] = []
@@ -47,11 +48,31 @@ final class LinkIngress: NSObject {
     }
 
     func receive(_ url: URL, senderBundleID: String? = nil) {
+        let resolved = resolveWebLocation(url)
+        let linkURL: URL
+        let mode: SchemeCommand.Mode
+        let sender: String?
+        if SchemeCommand.handles(resolved) {
+            switch SchemeCommand.parse(resolved) {
+            case .success(let command):
+                linkURL = command.link
+                mode = command.mode
+                sender = nil
+            case .failure(let error):
+                logger.error("Scheme command rejected: \(error.rawValue, privacy: .public)")
+                return
+            }
+        } else {
+            linkURL = resolved
+            mode = .route
+            sender = senderBundleID
+        }
         pending.append(Arrival(
-            url: resolveWebLocation(url),
+            url: linkURL,
             receivedAt: Date(),
-            senderBundleID: senderBundleID,
-            modifiers: NSEvent.modifierFlags
+            senderBundleID: sender,
+            modifiers: NSEvent.modifierFlags,
+            mode: mode
         ))
         drain()
     }
@@ -84,7 +105,8 @@ final class LinkIngress: NSObject {
                 url: arrival.url,
                 receivedAt: arrival.receivedAt,
                 senderBundleID: arrival.senderBundleID,
-                forcePicker: forcePickerModifier.map { arrival.modifiers.contains($0) } ?? false
+                forcePicker: forcePickerModifier.map { arrival.modifiers.contains($0) } ?? false,
+                mode: arrival.mode
             ))
         }
     }

@@ -8,6 +8,7 @@ final class LinkRouter {
 
     private let registry: DestinationRegistry
     private let store: ConfigurationStore
+    private let isRunning: (String) -> Bool
     private let launcher = Launcher()
     private let picker = PickerController()
     private let logger = Logger(subsystem: DestinationRegistry.ownBundleID, category: "router")
@@ -30,9 +31,13 @@ final class LinkRouter {
     private var configurationObservers: [(LinkwayConfiguration) -> Void] = []
     private var destinationObservers: [() -> Void] = []
 
-    init(registry: DestinationRegistry, store: ConfigurationStore) {
+    init(registry: DestinationRegistry, store: ConfigurationStore,
+         isRunning: @escaping (String) -> Bool = {
+             !NSRunningApplication.runningApplications(withBundleIdentifier: $0).isEmpty
+         }) {
         self.registry = registry
         self.store = store
+        self.isRunning = isRunning
         registry.onChange = { [weak self] in self?.destinationsChanged() }
     }
 
@@ -210,7 +215,8 @@ final class LinkRouter {
         let decision = engine.decide(
             link,
             processedURL: processing.url,
-            availableDestinations: registry.availableIDs
+            availableDestinations: registry.availableIDs,
+            pickerOrder: pickerDestinations(for: link.withURL(processing.url)).map(\.id)
         )
         logger.info("URL processing removed \(processing.removedParameters.count, privacy: .public) parameters")
         switch decision {
@@ -228,7 +234,7 @@ final class LinkRouter {
         picker.present(
             link: link,
             processing: processing, expanded: expanded,
-            destinations: pickerDestinations(for: link),
+            destinations: pickerDestinations(for: link.withURL(processing.url)),
             rememberTargets: RuleSuggestion.rememberTargets(for: link),
             style: configuration.pickerStyle,
             avatarProvider: { [registry] in registry.avatar(for: $0) },
@@ -261,8 +267,13 @@ final class LinkRouter {
         }
     }
 
-    private func pickerDestinations(for link: IncomingLink) -> [Destination] {
-        pickerDestinations(kind: link.kind == .mail ? .mailClient : .browser)
+    func pickerDestinations(for link: IncomingLink) -> [Destination] {
+        let destinations = pickerDestinations(kind: link.kind == .mail ? .mailClient : .browser)
+        guard link.mode.scope == .running else { return destinations }
+        let running = destinations.filter { destination in
+            isRunning(destination.id.bundleID)
+        }
+        return running.isEmpty ? destinations : running
     }
 
     func pickerDestinations(kind: DestinationKind) -> [Destination] {
@@ -285,7 +296,11 @@ final class LinkRouter {
 }
 
 private extension IncomingLink {
+    func withURL(_ url: URL) -> IncomingLink {
+        IncomingLink(url: url, receivedAt: receivedAt, senderBundleID: senderBundleID, forcePicker: forcePicker, mode: mode)
+    }
+
     func forcingPicker() -> IncomingLink {
-        IncomingLink(url: url, receivedAt: receivedAt, senderBundleID: senderBundleID, forcePicker: true)
+        IncomingLink(url: url, receivedAt: receivedAt, senderBundleID: senderBundleID, forcePicker: true, mode: mode)
     }
 }

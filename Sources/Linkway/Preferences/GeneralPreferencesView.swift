@@ -55,6 +55,14 @@ struct GeneralPreferencesView: View {
                 }
                 if let error = model.loginError { Text(error).foregroundStyle(.red) }
             }
+            Section("Scripting") {
+                scriptingExample("Terminal", code: #"open "linkway://open/https://example.com""#)
+                scriptingExample("AppleScript", code: #"open location "linkway://open/https://example.com""#)
+                DisclosureGroup("More examples") {
+                    scriptingExample("JavaScript", code: #"window.location.href = "linkway://open/https://example.com";"#)
+                    scriptingExample("Swift", code: #"NSWorkspace.shared.open(URL(string: "linkway://open/https://example.com")!)"#)
+                }
+            }
             Section("Configuration") {
                 HStack {
                     Button("Import…") { model.importFile() }
@@ -71,6 +79,25 @@ struct GeneralPreferencesView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             model.refreshLoginStatus()
             handlerStatusRevision += 1
+        }
+    }
+
+    private func scriptingExample(_ title: String, code: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(title).font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(code, forType: .string)
+                } label: {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+                .accessibilityLabel("Copy \(title) example")
+            }
+            Text(code).font(.system(.caption, design: .monospaced))
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
