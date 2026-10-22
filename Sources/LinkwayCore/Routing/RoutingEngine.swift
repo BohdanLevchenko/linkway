@@ -65,12 +65,15 @@ public struct RoutingEngine: Sendable {
         self.fallbacks = fallbacks
     }
 
-    public func decide(_ link: IncomingLink, processedURL: URL, availableDestinations: Set<DestinationID>) -> RoutingDecision {
-        explain(link, processedURL: processedURL, availableDestinations: availableDestinations).decision
+    public func decide(_ link: IncomingLink, processedURL: URL, availableDestinations: Set<DestinationID>, pickerOrder: [DestinationID] = []) -> RoutingDecision {
+        explain(link, processedURL: processedURL, availableDestinations: availableDestinations, pickerOrder: pickerOrder).decision
     }
 
-    public func explain(_ link: IncomingLink, processedURL: URL, availableDestinations: Set<DestinationID>) -> RoutingExplanation {
-        if link.forcePicker {
+    public func explain(_ link: IncomingLink, processedURL: URL, availableDestinations: Set<DestinationID>, pickerOrder: [DestinationID] = []) -> RoutingExplanation {
+        if case .prompt = link.mode {
+            return RoutingExplanation(evaluations: [], decision: .showPicker(.forcedByUser))
+        }
+        if link.mode == .route && link.forcePicker {
             return RoutingExplanation(evaluations: [], decision: .showPicker(.forcedByUser))
         }
         var evaluations: [RuleEvaluation] = []
@@ -94,6 +97,12 @@ public struct RoutingEngine: Sendable {
                     decision = .showPicker(.ruleTargetUnavailable(rule.id, destination))
                 }
             }
+            return RoutingExplanation(evaluations: evaluations, decision: decision)
+        }
+        if case .best = link.mode {
+            let decision: RoutingDecision = pickerOrder.first(where: { availableDestinations.contains($0) })
+                .map { .launch(LaunchRequest(url: processedURL, destination: $0), matchedRule: nil) }
+                ?? .showPicker(.noMatch)
             return RoutingExplanation(evaluations: evaluations, decision: decision)
         }
         let fallback: FallbackPolicy
