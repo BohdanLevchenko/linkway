@@ -52,6 +52,8 @@ public struct Destination: Sendable, Hashable, Identifiable {
     public let profileName: String?
     public let appURL: URL
     public let avatarURL: URL?
+    public let firefoxAvatar: String?
+    public let foregroundColorARGB: Int?
     public let highlightColorARGB: Int?
     public let supportsPrivateWindow: Bool
 
@@ -62,8 +64,11 @@ public struct Destination: Sendable, Hashable, Identifiable {
         profileName: String?,
         appURL: URL,
         supportsPrivateWindow: Bool,
-        avatarURL: URL? = nil, highlightColorARGB: Int? = nil
+        avatarURL: URL? = nil, highlightColorARGB: Int? = nil,
+        firefoxAvatar: String? = nil, foregroundColorARGB: Int? = nil
     ) {
+        self.firefoxAvatar = firefoxAvatar
+        self.foregroundColorARGB = foregroundColorARGB
         self.avatarURL = avatarURL
         self.highlightColorARGB = highlightColorARGB
         self.id = id
