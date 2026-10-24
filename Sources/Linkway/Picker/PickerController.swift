@@ -10,6 +10,7 @@ final class PickerController: NSObject, NSWindowDelegate {
         let processing: CleanResult?
         let expanded: Bool
         var destinations: [Destination]
+        let destinationProvider: (@MainActor (IncomingLink) -> [Destination])?
         let rememberTargets: [RememberTarget]
         let style: LinkwayCore.PickerStyle
         let avatarProvider: @MainActor (Destination) -> NSImage?
@@ -37,6 +38,7 @@ final class PickerController: NSObject, NSWindowDelegate {
         link: IncomingLink,
         processing: CleanResult? = nil, expanded: Bool = false,
         destinations: [Destination],
+        destinationProvider: (@MainActor (IncomingLink) -> [Destination])? = nil,
         rememberTargets: [RememberTarget],
         style: LinkwayCore.PickerStyle = .tiles,
         avatarProvider: @escaping @MainActor (Destination) -> NSImage? = { _ in nil },
@@ -44,20 +46,24 @@ final class PickerController: NSObject, NSWindowDelegate {
         iconProvider: @escaping @MainActor (Destination) -> NSImage,
         completion: @escaping @MainActor (PickerResult) -> Void
     ) {
-        queue.append(Request(link: link, processing: processing, expanded: expanded, destinations: destinations, rememberTargets: rememberTargets,
+        queue.append(Request(link: link, processing: processing, expanded: expanded, destinations: destinations, destinationProvider: destinationProvider, rememberTargets: rememberTargets,
                              style: style, avatarProvider: avatarProvider, onOpenPreferences: onOpenPreferences,
                              iconProvider: iconProvider, completion: completion))
         showNext()
     }
 
     func updateDestinations(_ destinations: (IncomingLink) -> [Destination]) {
-        if let link = current?.link {
+        if let link = model?.link {
             let updated = destinations(link)
             model?.updateDestinations(updated)
             current?.destinations = updated
         }
         for index in queue.indices {
-            queue[index].destinations = destinations(queue[index].link)
+            let request = queue[index]
+            let link = IncomingLink(url: request.processing?.url ?? request.link.url, receivedAt: request.link.receivedAt,
+                                    senderBundleID: request.link.senderBundleID, forcePicker: request.link.forcePicker,
+                                    mode: request.link.mode)
+            queue[index].destinations = destinations(link)
         }
     }
 
@@ -68,6 +74,9 @@ final class PickerController: NSObject, NSWindowDelegate {
         previousApplication = NSWorkspace.shared.frontmostApplication
         let model = PickerModel(link: request.link, destinations: request.destinations, rememberTargets: request.rememberTargets, style: request.style, processing: request.processing, expanded: request.expanded)
         model.onResult = { [weak self] result in self?.finish(result) }
+        model.onActiveLinkChange = { [weak model] link in
+            if let provider = request.destinationProvider { model?.updateDestinations(provider(link)) }
+        }
         self.model = model
         let panel = PickerPanel(
             contentRect: NSRect(x: 0, y: 0, width: 420, height: 480),

@@ -115,14 +115,17 @@ final class LinkRouter {
         let settings = configuration.urlProcessing
         let cleaned = TrackingCleaner(settings: settings).clean(url)
         let explanation = RoutingEngine(rules: configuration.rules, fallbacks: configuration.fallbacks)
-            .explain(link, processedURL: cleaned.url, availableDestinations: registry.availableIDs)
+            .explain(link, processedURL: cleaned.url, availableDestinations: availableIDs(for: cleaned.url))
         return RoutingExplanation(evaluations: explanation.evaluations, decision: explanation.decision,
                                   processedURL: cleaned.url, removedParameters: cleaned.removedParameters,
                                   wouldExpandShortLink: ShortLinkResolver(settings: settings).isShortLink(url))
     }
 
     private func notifyConfigurationChanged() {
+        registry.setWebmailAccounts(configuration.webmailAccounts)
+        picker.updateDestinations { [weak self] link in self?.pickerDestinations(for: link) ?? [] }
         for observer in configurationObservers { observer(configuration) }
+        for observer in destinationObservers { observer() }
     }
 
     func targetName(for action: RuleAction) -> String {
@@ -215,7 +218,7 @@ final class LinkRouter {
         let decision = engine.decide(
             link,
             processedURL: processing.url,
-            availableDestinations: registry.availableIDs,
+            availableDestinations: availableIDs(for: processing.url),
             pickerOrder: pickerDestinations(for: link.withURL(processing.url)).map(\.id)
         )
         logger.info("URL processing removed \(processing.removedParameters.count, privacy: .public) parameters")
@@ -235,6 +238,7 @@ final class LinkRouter {
             link: link,
             processing: processing, expanded: expanded,
             destinations: pickerDestinations(for: link.withURL(processing.url)),
+            destinationProvider: { [weak self] in self?.pickerDestinations(for: $0) ?? [] },
             rememberTargets: RuleSuggestion.rememberTargets(for: link),
             style: configuration.pickerStyle,
             avatarProvider: { [registry] in registry.avatar(for: $0) },
@@ -254,7 +258,8 @@ final class LinkRouter {
     }
 
     private func launch(_ request: LaunchRequest, for link: IncomingLink, processing: CleanResult, expanded: Bool) {
-        bounceBacks.recordLaunch(bundleID: request.destination.bundleID, startedAt: Date())
+        let bundleID = registry.webmailAccount(for: request.destination)?.browser.bundleID ?? request.destination.bundleID
+        bounceBacks.recordLaunch(bundleID: bundleID, startedAt: Date())
         launchesInFlight += 1
         Task {
             defer { launchesInFlight -= 1; drain() }
@@ -267,11 +272,16 @@ final class LinkRouter {
         }
     }
 
+    func availableIDs(for url: URL) -> Set<DestinationID> {
+        registry.availableIDs
+    }
+
     func pickerDestinations(for link: IncomingLink) -> [Destination] {
         let destinations = pickerDestinations(kind: link.kind == .mail ? .mailClient : .browser)
         guard link.mode.scope == .running else { return destinations }
         let running = destinations.filter { destination in
-            isRunning(destination.id.bundleID)
+            let target = registry.webmailAccount(for: destination.id)?.browser ?? destination.id
+            return isRunning(target.bundleID)
         }
         return running.isEmpty ? destinations : running
     }

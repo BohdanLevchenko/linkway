@@ -158,3 +158,32 @@ import Testing
     let mail = URL(string: "mailto:a@example.com?utm_source=keep")!
     #expect(router.explain(mail, senderBundleID: nil).processedURL == mail)
 }
+
+@Test @MainActor func webmailListRowsKeepFavoriteOrderAndFullLabels() throws {
+    let browser = try #require(samplePicker(count: 1).destinations.first)
+    let gmail = WebmailAccount(provider: .gmail, displayName: "Personal", browser: browser.id)
+    let yahoo = WebmailAccount(provider: .yahoo, displayName: "Personal", browser: browser.id)
+    let secondGmail = WebmailAccount(provider: .gmail, displayName: "Work", browser: browser.id)
+    let mail = Destination(id: .init(bundleID: "com.apple.mail"), kind: .mailClient, appName: "Mail",
+                           profileName: nil, appURL: URL(filePath: "/fake/Mail.app"), supportsPrivateWindow: false)
+    let destinations = [try #require(gmail.destination(target: browser)), mail,
+                        try #require(yahoo.destination(target: browser)),
+                        try #require(secondGmail.destination(target: browser))]
+    let model = PickerModel(link: .init(url: URL(string: "mailto:a@example.com")!, receivedAt: Date(),
+                                       senderBundleID: nil, forcePicker: true), destinations: destinations)
+    #expect(model.rows.compactMap(\.destination) == destinations)
+    #expect(model.tiles == destinations.map(PickerTile.destination))
+    #expect(model.rows.map(\.title) == ["Gmail · Personal", "Mail", "Yahoo Mail · Personal", "Gmail · Work"])
+    #expect(Set(model.rows.map(\.id)).count == destinations.count)
+    var opened: DestinationID?
+    model.onResult = { if case .open(let request, _) = $0 { opened = request.destination } }
+    for (index, destination) in destinations.enumerated() {
+        #expect(model.pickDigit(index + 1))
+        #expect(model.prefix == nil)
+        #expect(opened == destination.id)
+    }
+    model.moveSelection(by: 1)
+    #expect(model.selectedID == mail.id)
+    model.moveSelection(by: 1)
+    #expect(model.selectedID == yahoo.destinationID)
+}

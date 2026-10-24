@@ -16,6 +16,19 @@ final class DestinationRegistry {
     private(set) var hasLoaded = false
     var onChange: (() -> Void)?
 
+    private var snapshot: DestinationDiscovery.Snapshot?
+    private(set) var webmailAccounts: [WebmailAccount] = []
+
+    func setWebmailAccounts(_ accounts: [WebmailAccount]) {
+        guard accounts != webmailAccounts else { return }
+        webmailAccounts = accounts
+        if let snapshot { apply(snapshot) }
+    }
+
+    func webmailAccount(for id: DestinationID) -> WebmailAccount? {
+        webmailAccounts.first { $0.destinationID == id }
+    }
+
     private var index: [DestinationID: Destination] = [:]
     private var icons: [URL: NSImage] = [:]
     private var avatars: [URL: NSImage] = [:]
@@ -66,7 +79,8 @@ final class DestinationRegistry {
         return image
     }
 
-    private func apply(_ snapshot: DestinationDiscovery.Snapshot) {
+    func apply(_ snapshot: DestinationDiscovery.Snapshot) {
+        self.snapshot = snapshot
         if watcher?.paths != snapshot.watchPaths {
             watcher = FileSystemWatcher(paths: snapshot.watchPaths, latency: 1.0) { [weak self] _ in
                 self?.refresh()
@@ -74,10 +88,16 @@ final class DestinationRegistry {
         }
         avatars.removeAll()
         missingAvatars.removeAll()
-        let resolvable = Dictionary(snapshot.resolvable.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        guard !hasLoaded || snapshot.destinations != destinations || resolvable != index else { return }
+        let browsers = Dictionary(snapshot.resolvable.filter { $0.kind == .browser }.map { ($0.id, $0) },
+                                  uniquingKeysWith: { first, _ in first })
+        let webmail = webmailAccounts.compactMap { account in
+            browsers[account.browser].flatMap { account.destination(target: $0) }
+        }
+        let entries = snapshot.destinations + webmail
+        let resolvable = Dictionary((snapshot.resolvable + webmail).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        guard !hasLoaded || entries != destinations || resolvable != index else { return }
         hasLoaded = true
-        destinations = snapshot.destinations
+        destinations = entries
         index = resolvable
         availableIDs = Set(resolvable.keys)
         icons = icons.filter { url, _ in snapshot.resolvable.contains { $0.appURL == url } }

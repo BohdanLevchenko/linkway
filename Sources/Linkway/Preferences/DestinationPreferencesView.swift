@@ -24,13 +24,16 @@ struct DestinationPreferencesView: View {
             Text("Favorites appear first in the picker. Drag rows to reorder within favorites or other destinations.")
                 .font(.caption).foregroundStyle(.secondary)
             List {
+                if kind == .mailClient {
+                    WebmailPreferencesView(model: model)
+                }
                 ForEach(model.destinations(kind: kind)) { destination in
                     row(destination)
                 }
                 .onMove { model.moveDestinations(kind: kind, from: $0, to: $1) }
             }
             .overlay {
-                if model.destinations(kind: kind).isEmpty { Text("No destinations found.").foregroundStyle(.secondary) }
+                if kind != .mailClient && model.destinations(kind: kind).isEmpty { Text("No destinations found.").foregroundStyle(.secondary) }
             }
             Picker("When no rule matches", selection: fallback) {
                 Text("Ask with picker").tag(nil as DestinationID?)

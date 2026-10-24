@@ -14,9 +14,19 @@ enum PickerShortcut: Equatable, Sendable {
     }
 }
 
+enum PickerGroupingKey: Hashable, Sendable {
+    case app(String)
+    case webmail(DestinationID)
+
+    init(_ destination: Destination) {
+        self = destination.id.bundleID == WebmailAccount.bundleID
+            ? .webmail(destination.id) : .app(destination.id.bundleID)
+    }
+}
+
 enum PickerRow: Identifiable, Sendable {
     enum ID: Hashable {
-        case header(String)
+        case header(PickerGroupingKey)
         case destination(DestinationID)
     }
 
@@ -25,8 +35,17 @@ enum PickerRow: Identifiable, Sendable {
 
     var id: ID {
         switch self {
-        case .header(let first, _): return .header(first.id.bundleID)
+        case .header(let first, _): return .header(PickerGroupingKey(first))
         case .destination(let destination, _, _): return .destination(destination.id)
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .header(let first, _): return first.appName
+        case .destination(let destination, _, let indented):
+            if destination.id.bundleID == WebmailAccount.bundleID { return destination.displayName }
+            return indented ? (destination.profileName ?? destination.appName) : destination.appName
         }
     }
 
@@ -40,12 +59,13 @@ enum PickerRow: Identifiable, Sendable {
 enum PickerLayout {
     static func rows(for destinations: [Destination]) -> [PickerRow] {
         var groups: [[Destination]] = []
-        var groupIndices: [String: Int] = [:]
+        var groupIndices: [PickerGroupingKey: Int] = [:]
         for destination in destinations {
-            if let index = groupIndices[destination.id.bundleID] {
+            let key = PickerGroupingKey(destination)
+            if let index = groupIndices[key] {
                 groups[index].append(destination)
             } else {
-                groupIndices[destination.id.bundleID] = groups.count
+                groupIndices[key] = groups.count
                 groups.append([destination])
             }
         }
@@ -76,6 +96,7 @@ enum PickerTile: Hashable {
 final class PickerModel: ObservableObject {
     @Published private(set) var presentation: PickerPresentation
     @Published var selectedTile = 0
+    var onActiveLinkChange: ((IncomingLink) -> Void)?
     var onPresentationChange: (() -> Void)?
     var sharing = false
     var tiles: [PickerTile] {
@@ -125,6 +146,7 @@ final class PickerModel: ObservableObject {
     func toggleOriginal() {
         guard canToggleOriginal else { return }
         usesOriginal.toggle()
+        onActiveLinkChange?(link)
         rememberIndex = nil
     }
     @Published private(set) var destinations: [Destination]
@@ -456,10 +478,10 @@ struct PickerView: View {
                         .accessibilityHidden(true)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(indented ? (destination.profileName ?? destination.appName) : destination.appName)
+                    Text(PickerRow.destination(destination, shortcut: shortcut, indented: indented).title)
                         .font(.body.weight(.medium))
                         .foregroundStyle(.primary)
-                    if !indented, let profile = destination.profileName {
+                    if !indented, destination.id.bundleID != WebmailAccount.bundleID, let profile = destination.profileName {
                         Text(profile)
                             .font(.caption)
                             .foregroundStyle(.secondary)

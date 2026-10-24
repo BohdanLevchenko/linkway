@@ -17,6 +17,15 @@ final class Launcher {
     private static let forwardTimeout: Duration = .seconds(3)
 
     func open(_ request: LaunchRequest, registry: DestinationRegistry) async throws(LaunchError) {
+        if request.destination.bundleID == WebmailAccount.bundleID {
+            guard registry.destination(for: request.destination) != nil,
+                  let account = registry.webmailAccount(for: request.destination),
+                  let browserRequest = account.launchRequest(for: request.url) else {
+                throw .destinationUnavailable(request.destination)
+            }
+            try await open(browserRequest, registry: registry)
+            return
+        }
         guard let destination = registry.destination(for: request.destination),
               destination.id.bundleID.caseInsensitiveCompare(DestinationRegistry.ownBundleID) != .orderedSame,
               FileManager.default.fileExists(atPath: destination.appURL.path(percentEncoded: false))
