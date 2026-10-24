@@ -16,6 +16,7 @@ public struct LinkwayConfiguration: Codable, Sendable, Hashable {
     public static let currentSchemaVersion = 1
     public var urlProcessing: URLProcessingSettings
     public var schemaVersion: Int
+    public var webmailAccounts: [WebmailAccount]
     public var rules: [Rule]
     public var fallbacks: FallbackPolicies
     public var destinationOrder: [DestinationID]
@@ -29,8 +30,10 @@ public struct LinkwayConfiguration: Codable, Sendable, Hashable {
         rules: [Rule] = [], fallbacks: FallbackPolicies = FallbackPolicies(),
         destinationOrder: [DestinationID] = [], hiddenDestinations: Set<DestinationID> = [],
         favoriteDestinations: [DestinationID] = [], forcePickerModifier: ModifierKey = .option,
-        pickerStyle: PickerStyle = .tiles, urlProcessing: URLProcessingSettings = .init()
+        pickerStyle: PickerStyle = .tiles, urlProcessing: URLProcessingSettings = .init(),
+        webmailAccounts: [WebmailAccount] = []
     ) {
+        self.webmailAccounts = webmailAccounts
         self.urlProcessing = urlProcessing
         self.pickerStyle = pickerStyle
         self.schemaVersion = schemaVersion
@@ -43,13 +46,14 @@ public struct LinkwayConfiguration: Codable, Sendable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case urlProcessing
+        case webmailAccounts, urlProcessing
         case schemaVersion, rules, fallbacks, destinationOrder, hiddenDestinations
         case favoriteDestinations, forcePickerModifier, pickerStyle
     }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        webmailAccounts = try values.decodeIfPresent([WebmailAccount].self, forKey: .webmailAccounts) ?? []
         urlProcessing = try values.decodeIfPresent(URLProcessingSettings.self, forKey: .urlProcessing) ?? .init()
         schemaVersion = try values.decode(Int.self, forKey: .schemaVersion)
         rules = try values.decode([Rule].self, forKey: .rules)

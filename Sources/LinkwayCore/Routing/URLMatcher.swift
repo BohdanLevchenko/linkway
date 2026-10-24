@@ -153,15 +153,13 @@ public enum URLMatcher {
     }
 
     static func recipientDomains(_ components: URLComponents?) -> [String] {
-        var recipients = [components?.percentEncodedPath.removingPercentEncoding ?? ""]
-        recipients += (components?.queryItems ?? []).filter { $0.name.caseInsensitiveCompare("to") == .orderedSame }
-            .compactMap(\.value)
-        return recipients.flatMap(splitAddressList).compactMap(recipientDomain)
+        guard let url = components?.url, let message = MailtoMessage(url: url) else { return [] }
+        return message.to.compactMap(recipientDomain)
     }
 
     /// RFC 5322-lite: quoted strings support backslash escapes; angle addresses may
     /// carry a display name. Comments, groups, and obsolete address syntax are unsupported.
-    private static func splitAddressList(_ value: String) -> [String] {
+    static func splitAddressList(_ value: String) -> [String] {
         var entries: [String] = []
         var entry = ""
         var quoted = false, escaped = false
