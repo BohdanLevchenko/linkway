@@ -71,7 +71,7 @@ enum ConditionKind: String, CaseIterable, Identifiable {
         switch self {
         case .sourceApp: true
         case .mailRecipientDomain: kind == .mailClient
-        default: kind == .browser
+        default: kind == .browser || kind == .app
         }
     }
 }

@@ -31,6 +31,16 @@ final class Launcher {
               FileManager.default.fileExists(atPath: destination.appURL.path(percentEncoded: false))
         else { throw .destinationUnavailable(request.destination) }
 
+        let launchURL: URL
+        if destination.kind == .app {
+            guard let adapter = DeepLinkCatalog.adapter(for: destination.id.bundleID),
+                  let url = adapter.appURL(for: request.url) else { throw .destinationUnavailable(request.destination) }
+            guard !request.privateWindow else { throw .privateWindowUnsupported(request.destination) }
+            launchURL = url
+        } else {
+            launchURL = request.url
+        }
+
         do {
             try await serialized(destination.id.bundleID.lowercased()) {
                 let state: BrowserRunningState = NSRunningApplication.runningApplications(
@@ -42,7 +52,7 @@ final class Launcher {
                     let configuration = NSWorkspace.OpenConfiguration()
                     configuration.activates = true
                     _ = try await NSWorkspace.shared.open(
-                        [request.url], withApplicationAt: destination.appURL, configuration: configuration
+                        [launchURL], withApplicationAt: destination.appURL, configuration: configuration
                     )
                 }
             }

@@ -104,8 +104,14 @@ final class LinkRouter {
 
     /// Everything the picker can show, hidden entries included, in discovery order.
     var pickerEntries: [Destination] { registry.destinations }
-    var ruleTargets: [Destination] { registry.ruleTargets }
-    var availableIDs: Set<DestinationID> { registry.availableIDs }
+    var ruleTargets: [Destination] {
+        registry.ruleTargets.filter { destination in
+            guard destination.kind == .app,
+                  let adapter = DeepLinkCatalog.adapter(for: destination.id.bundleID) else { return true }
+            return !configuration.disabledAppAdapters.contains(adapter.id.rawValue)
+        }
+    }
+    var availableIDs: Set<DestinationID> { Set(ruleTargets.map(\.id)) }
     func destination(for id: DestinationID) -> Destination? { registry.destination(for: id) }
     func icon(for destination: Destination) -> NSImage { registry.icon(for: destination) }
 
@@ -273,11 +279,15 @@ final class LinkRouter {
     }
 
     func availableIDs(for url: URL) -> Set<DestinationID> {
-        registry.availableIDs
+        Set(registry.ruleTargets.filter {
+            DeepLinkCatalog.supports($0, url: url, disabledAdapters: configuration.disabledAppAdapters)
+        }.map(\.id))
     }
 
     func pickerDestinations(for link: IncomingLink) -> [Destination] {
-        let destinations = pickerDestinations(kind: link.kind == .mail ? .mailClient : .browser)
+        let apps = DeepLinkCatalog.matchingApps(in: pickerDestinations(kind: .app), for: link.url,
+                                               disabledAdapters: configuration.disabledAppAdapters)
+        let destinations = apps + pickerDestinations(kind: link.kind == .mail ? .mailClient : .browser)
         guard link.mode.scope == .running else { return destinations }
         let running = destinations.filter { destination in
             let target = registry.webmailAccount(for: destination.id)?.browser ?? destination.id

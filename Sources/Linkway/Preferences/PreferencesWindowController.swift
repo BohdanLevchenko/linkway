@@ -50,6 +50,8 @@ private struct PreferencesView: View {
                 .tabItem { Label("Browsers", systemImage: "globe") }
             DestinationPreferencesView(model: model, kind: .mailClient)
                 .tabItem { Label("Mail", systemImage: "envelope") }
+            AppIntegrationsPreferencesView(model: model)
+                .tabItem { Label("Apps", systemImage: "app") }
             LinksPreferencesView(model: model)
                 .tabItem { Label("Links", systemImage: "link") }
             RulesPreferencesView(model: model)

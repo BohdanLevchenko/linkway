@@ -150,7 +150,9 @@ enum DestinationDiscovery {
             return chosen.values.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         }
 
-        let browsers = installedApps(handling: webProbe).filter(isBrowser)
+        let browsers = installedApps(handling: webProbe).filter {
+            DeepLinkCatalog.adapter(for: $0.bundleID) == nil && isBrowser($0)
+        }
         let browserIDs = Set(browsers.map { $0.bundleID.lowercased() })
         let mailClients = installedApps(handling: mailProbe).filter { app in
             !browserIDs.contains(app.bundleID.lowercased()) && isMailClient(app)
@@ -234,6 +236,18 @@ enum DestinationDiscovery {
         }
         destinations += mailDestinations
         resolvable += mailDestinations
+
+        let appDestinations = DeepLinkCatalog.adapters.flatMap { adapter in
+            adapter.appBundleIDs.compactMap { bundleID -> Destination? in
+                guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID),
+                      url.resolvingSymlinksInPath().standardizedFileURL.path != ownPath else { return nil }
+                return Destination(id: DestinationID(bundleID: bundleID), kind: .app,
+                                   appName: adapter.displayName, profileName: nil, appURL: url,
+                                   supportsPrivateWindow: false)
+            }
+        }
+        destinations += appDestinations
+        resolvable += appDestinations
 
         let appDirectories = ["/Applications", home.appending(path: "Applications").path]
             .filter { fileManager.fileExists(atPath: $0) }
