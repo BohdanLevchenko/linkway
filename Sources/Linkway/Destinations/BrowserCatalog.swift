@@ -8,8 +8,9 @@ enum BrowserEngine: Sendable {
 }
 
 enum ProfileAdapter: Sendable, Hashable {
-    /// `userDataPath` is relative to `~/Library/Application Support`.
+    /// Adapter paths are relative to `~/Library/Application Support`.
     case chromium(userDataPath: String)
+    case firefox(supportPath: String)
 }
 
 struct KnownBrowser: Sendable {
@@ -17,7 +18,7 @@ struct KnownBrowser: Sendable {
     let engine: BrowserEngine
     /// Where profile metadata lives, even when the adapter is not enabled yet.
     let profileAdapter: ProfileAdapter?
-    /// Profile destinations are emitted only for verified adapters.
+    /// Profile destinations are emitted only for enabled adapters.
     let profileAdapterEnabled: Bool
     let privateWindowArgument: String?
 
@@ -72,7 +73,18 @@ enum BrowserCatalog {
         ),
         KnownBrowser(
             bundleID: "org.mozilla.firefox", engine: .gecko,
-            profileAdapter: nil, profileAdapterEnabled: false, privateWindowArgument: "-private-window"
+            profileAdapter: .firefox(supportPath: "Firefox"), profileAdapterEnabled: true,
+            privateWindowArgument: "-private-window"
+        ),
+        KnownBrowser(
+            bundleID: "org.mozilla.firefoxdeveloperedition", engine: .gecko,
+            profileAdapter: .firefox(supportPath: "Firefox"), profileAdapterEnabled: true,
+            privateWindowArgument: "-private-window"
+        ),
+        KnownBrowser(
+            bundleID: "org.mozilla.nightly", engine: .gecko,
+            profileAdapter: .firefox(supportPath: "Firefox"), profileAdapterEnabled: true,
+            privateWindowArgument: "-private-window"
         ),
     ]
 

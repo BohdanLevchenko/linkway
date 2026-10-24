@@ -266,6 +266,7 @@ final class PickerModel: ObservableObject {
 struct PickerView: View {
     @ObservedObject var model: PickerModel
     let iconProvider: @MainActor (Destination) -> NSImage
+    var avatarProvider: @MainActor (Destination) -> NSImage? = { _ in nil }
     @State private var showsFullURL = false
 
     var body: some View {
@@ -445,7 +446,9 @@ struct PickerView: View {
             model.open(destination, privateWindow: NSEvent.modifierFlags.contains(.shift))
         } label: {
             HStack(spacing: 12) {
-                if !indented {
+                if destination.profileName != nil {
+                    ProfileAvatarView(destination: destination, size: 32, avatarProvider: avatarProvider)
+                } else if !indented {
                     Image(nsImage: iconProvider(destination))
                         .resizable()
                         .scaledToFit()

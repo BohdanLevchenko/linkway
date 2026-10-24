@@ -29,7 +29,7 @@ struct PickerRootView: View {
 
     var body: some View {
         switch model.presentation {
-        case .list: PickerView(model: model, iconProvider: iconProvider)
+        case .list: PickerView(model: model, iconProvider: iconProvider, avatarProvider: avatarProvider)
         case .tiles:
             TilesPickerView(model: model, iconProvider: iconProvider, avatarProvider: avatarProvider,
                             onOpenPreferences: onOpenPreferences)
@@ -137,18 +137,8 @@ private struct TilesPickerView: View {
                 .overlay { Image(systemName: "ellipsis").font(.system(size: 30, weight: .medium)) }
         case .destination(let destination):
             Group {
-                if let name = destination.profileName {
-                    ZStack {
-                        Circle().fill(avatarColor(destination, name: name))
-                        if let avatar = avatarProvider(destination) {
-                            Image(nsImage: avatar).resizable().scaledToFill()
-                        } else {
-                            Text(String(name.prefix(1)).uppercased())
-                                .font(.system(size: 30, weight: .medium)).foregroundStyle(.white)
-                        }
-                    }
-                    .frame(width: TileMetrics.icon, height: TileMetrics.icon)
-                    .clipShape(Circle())
+                if destination.profileName != nil {
+                    ProfileAvatarView(destination: destination, size: TileMetrics.icon, avatarProvider: avatarProvider)
                     .overlay(alignment: .bottomTrailing) {
                         Image(nsImage: iconProvider(destination)).resizable().scaledToFit()
                             .frame(width: TileMetrics.badge, height: TileMetrics.badge)
@@ -166,16 +156,6 @@ private struct TilesPickerView: View {
                 }
             }
         }
-    }
-
-    private func avatarColor(_ destination: Destination, name: String) -> Color {
-        if let argb = destination.highlightColorARGB {
-            let bits = UInt32(truncatingIfNeeded: argb)
-            return Color(red: Double((bits >> 16) & 255) / 255,
-                         green: Double((bits >> 8) & 255) / 255, blue: Double(bits & 255) / 255)
-        }
-        let hash = name.utf8.reduce(UInt32(2166136261)) { ($0 ^ UInt32($1)) &* 16777619 }
-        return Color(hue: Double(hash % 360) / 360, saturation: 0.55, brightness: 0.65)
     }
 
     private var footer: some View {

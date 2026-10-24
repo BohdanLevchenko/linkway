@@ -22,11 +22,13 @@ final class Launcher {
               FileManager.default.fileExists(atPath: destination.appURL.path(percentEncoded: false))
         else { throw .destinationUnavailable(request.destination) }
 
-        let arguments = try commandLine(for: request, destination: destination)
         do {
             try await serialized(destination.id.bundleID.lowercased()) {
-                if let arguments {
-                    try await self.launch(destination, arguments: arguments)
+                let state: BrowserRunningState = NSRunningApplication.runningApplications(
+                    withBundleIdentifier: destination.id.bundleID
+                ).isEmpty ? .stopped : .running
+                if let plan = try self.commandLine(for: request, destination: destination, runningState: state) {
+                    try await self.launch(destination, plan: plan)
                 } else {
                     let configuration = NSWorkspace.OpenConfiguration()
                     configuration.activates = true
@@ -56,13 +58,39 @@ final class Launcher {
     }
 
     /// `nil` means a plain Launch Services open is enough.
-    private func commandLine(for request: LaunchRequest, destination: Destination) throws(LaunchError) -> [String]? {
+    private func commandLine(
+        for request: LaunchRequest, destination: Destination, runningState: BrowserRunningState
+    ) throws(LaunchError) -> BrowserLaunchPlan? {
         guard destination.id.profileKey != nil || request.privateWindow else { return nil }
 
         let browser = BrowserCatalog.browser(for: destination.id.bundleID)
         // An argument starting with "-" would be parsed as a browser switch.
         guard request.url.scheme != nil, !request.url.absoluteString.hasPrefix("-") else {
             throw .launchFailed("Refusing to pass a non-absolute URL on the command line")
+        }
+
+        if request.privateWindow && !destination.supportsPrivateWindow {
+            throw .privateWindowUnsupported(destination.id)
+        }
+        if browser?.engine == .gecko {
+            var profilePath: URL?
+            if let key = destination.id.profileKey {
+                guard case let .firefox(supportPath)? = browser?.enabledProfileAdapter else {
+                    throw .destinationUnavailable(destination.id)
+                }
+                let support = FileManager.default.homeDirectoryForCurrentUser
+                    .appending(path: "Library/Application Support", directoryHint: .isDirectory)
+                    .appending(path: supportPath, directoryHint: .isDirectory)
+                profilePath = FirefoxProfiles.profilePath(forKey: key, supportDirectory: support)
+                var isDirectory: ObjCBool = false
+                guard let profilePath,
+                      FileManager.default.fileExists(atPath: profilePath.path, isDirectory: &isDirectory),
+                      isDirectory.boolValue else { throw .destinationUnavailable(destination.id) }
+            }
+            return .firefox(
+                url: request.url, profilePath: profilePath,
+                privateWindow: request.privateWindow, runningState: runningState
+            )
         }
 
         var arguments: [String] = []
@@ -76,18 +104,22 @@ final class Launcher {
             }
             arguments.append(flag)
         }
-        return arguments + [request.url.absoluteString]
+        return BrowserLaunchPlan(arguments: arguments + [request.url.absoluteString], runningState: runningState)
     }
 
-    /// `OpenConfiguration.arguments` is ignored by an already running app, so a running browser
-    /// gets a second short-lived process that forwards the arguments to it. A cold start goes
-    /// through Launch Services so the browser is not our child process.
-    /// Must run inside `serialized` so the running check is fresh for this launch.
-    private func launch(_ destination: Destination, arguments: [String]) async throws {
-        let bundleID = destination.id.bundleID
-        guard NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty else {
-            try await forward(destination, arguments: arguments)
-            if let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first {
+    // Firefox remotes by profile path; no --new-instance/-no-remote (they disable forwarding).
+    // State             Delivery          Result (normal / private) — UNVERIFIED by hand
+    // Stopped           Launch Services   Start target profile / private window
+    // Same profile      Executable        Remote tab / private window to target
+    // Other profile     Executable        Remote to target if present, otherwise start it
+    // Arguments are identical across states: -profile <path> [-private-window] <url>.
+    // Must run inside `serialized` so the running state is fresh.
+    private func launch(_ destination: Destination, plan: BrowserLaunchPlan) async throws {
+        if plan.delivery == .forward {
+            try await forward(destination, arguments: plan.arguments)
+            // Firefox's remote service raises the target; activating the first app may raise another profile.
+            if BrowserCatalog.browser(for: destination.id.bundleID)?.engine != .gecko,
+               let app = NSRunningApplication.runningApplications(withBundleIdentifier: destination.id.bundleID).first {
                 NSApp.yieldActivation(to: app)
                 app.activate()
             }
@@ -96,7 +128,7 @@ final class Launcher {
 
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
-        configuration.arguments = arguments
+        configuration.arguments = plan.arguments
         _ = try await NSWorkspace.shared.openApplication(at: destination.appURL, configuration: configuration)
     }
 

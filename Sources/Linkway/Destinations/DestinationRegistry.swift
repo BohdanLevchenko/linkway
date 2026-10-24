@@ -92,8 +92,7 @@ enum DestinationDiscovery {
         let destinations: [Destination]
         /// `destinations` plus the browser-level and single-profile entries the picker hides.
         let resolvable: [Destination]
-        /// App folders (recursive) and exact `Local State` file paths, so Chromium's constant
-        /// profile writes elsewhere in the user-data dir never wake us.
+        /// App folders (recursive) and exact profile metadata paths, avoiding unrelated profile writes.
         let watchPaths: [String]
     }
 
@@ -158,7 +157,7 @@ enum DestinationDiscovery {
                 id: DestinationID(bundleID: app.bundleID), kind: .browser, appName: app.name,
                 profileName: nil, appURL: app.url, supportsPrivateWindow: supportsPrivate
             )
-            let profileDestinations = profiles.map { profile in
+            var profileDestinations = profiles.map { profile in
                 Destination(
                     id: DestinationID(bundleID: app.bundleID, profileKey: profile.directory),
                     kind: .browser, appName: app.name, profileName: profile.displayName,
@@ -167,6 +166,42 @@ enum DestinationDiscovery {
                         userData?.appending(path: profile.directory).appending(path: file)
                     }, highlightColorARGB: profile.highlightColorARGB
                 )
+            }
+            if case let .firefox(supportPath)? = known?.enabledProfileAdapter {
+                let support = supportDirectory.appending(path: supportPath, directoryHint: .isDirectory)
+                let ini = support.appending(path: FirefoxProfiles.fileName)
+                watchPaths.append(ini.path)
+                let contents = (try? String(contentsOf: ini, encoding: .utf8)) ?? ""
+                let groupURLs = FirefoxProfiles.groupDatabaseURLs(fromINI: contents, supportDirectory: support)
+                watchPaths += groupURLs.flatMap { [$0.path, $0.path + "-wal"] }
+                watchPaths.append(support.appending(path: "Profile Groups").path)
+                let installedCount = browsers.filter {
+                    if case .firefox(let path)? = BrowserCatalog.browser(for: $0.bundleID)?.enabledProfileAdapter {
+                        return path == supportPath
+                    }
+                    return false
+                }.count
+                let firefoxProfiles = FirefoxProfiles.selectableProfiles(
+                    fromINI: contents, supportDirectory: support, installedBrowserCount: installedCount
+                ) { path in
+                    var isDirectory: ObjCBool = false
+                    return fileManager.fileExists(atPath: path.path, isDirectory: &isDirectory) && isDirectory.boolValue
+                }
+                profileDestinations = firefoxProfiles.map { profile in
+                    Destination(
+                        id: DestinationID(
+                            bundleID: app.bundleID,
+                            profileKey: FirefoxProfiles.profileKey(for: profile.path, supportDirectory: support)
+                        ), kind: .browser, appName: app.name, profileName: profile.name,
+                        appURL: app.url, supportsPrivateWindow: supportsPrivate,
+                        avatarURL: profile.avatar.flatMap { avatar in
+                            guard !FirefoxAvatar.isGlyph(avatar) else { return nil }
+                            if let url = URL(string: avatar), url.scheme != nil { return url }
+                            return FirefoxProfiles.profilePath(forKey: avatar, supportDirectory: support)
+                        }, highlightColorARGB: profile.highlightColorARGB,
+                        firefoxAvatar: profile.avatar, foregroundColorARGB: profile.foregroundColorARGB
+                    )
+                }
             }
             destinations += profileDestinations.count >= 2 ? profileDestinations : [browserLevel]
             resolvable += [browserLevel] + profileDestinations
