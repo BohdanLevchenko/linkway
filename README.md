@@ -8,16 +8,28 @@ A small menu bar app for macOS that decides where your links open. Set it as the
 
 Watch the 40 second tour on the [project page](https://bohdanlevchenko.github.io/linkway/).
 
+## Install
+
+Download the zip from the [latest release](https://github.com/bohdanlevchenko/linkway/releases/latest), unzip it and move `Linkway.app` to Applications. Linkway needs macOS 14 or later.
+
+The app is not notarized yet, so macOS blocks the first launch. Approve it in System Settings › Privacy & Security, or clear the quarantine flag:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Linkway.app
+```
+
+Then open Settings from the menu bar icon and make Linkway the default browser.
+
 ## Features
 
 - Picker with a tile for each browser and profile. Press ⌘1, ⌘2 and so on to choose from the keyboard, hold ⇧ for a private window, or tick "Remember this choice" to turn the pick into a rule.
 - Rules that match on host, subdomain, URL prefix, path, sender app or mail recipient domain. The first match wins, and a built-in tester shows which rule a URL hits without opening it. Hold ⌥ while clicking a link to get the picker anyway.
 - Browser profiles for Chrome, Edge, Brave, Helium, Firefox and Zen, picked up automatically when you add or rename one.
 - Tracking cleaner that strips `utm_*`, `fbclid`, `gclid`, `msclkid` and similar, and unwraps Google, Facebook and Outlook redirect links. Signed and login links are left alone.
-- Optional short link expansion for bit.ly, t.co and friends.
+- Short link expansion for bit.ly, t.co and similar services, off by default.
 - Deep links that open Figma, Linear, Notion, Zoom, Teams, Spotify, Discord and Slack web links in the desktop app when it is installed.
 - `mailto:` links routed to a mail app or to Gmail, Outlook, Yahoo Mail, Fastmail or Proton Mail in the browser.
-- A Chromium extension and a bookmarklet that hand the current page or any link to Linkway. See [Extensions/chromium](Extensions/chromium/README.md).
+- A Chromium extension and a bookmarklet that hand the current page or any link to Linkway. The bookmarklet works in Safari too. See [Extensions/chromium](Extensions/chromium/README.md).
 
 ## URL scheme
 
@@ -38,7 +50,7 @@ Only `http`, `https` and `mailto` links are accepted. Choosy's `x-choosy://` com
 
 ## Building
 
-Needs macOS 14 or later and Swift 6.
+You need macOS 14 or later and Swift 6.
 
 ```sh
 swift build
@@ -47,7 +59,16 @@ scripts/bundle.sh            # release build into build/Linkway.app
 scripts/bundle.sh --install  # also copy it to ~/Applications and register it
 ```
 
-After launching, open Settings from the menu bar icon and make Linkway the default browser.
+## Releasing
+
+Set `CFBundleShortVersionString` in `Resources/Info.plist` and bump `CFBundleVersion`, commit, then push a matching tag:
+
+```sh
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+The release workflow checks that the tag matches the version, runs the tests, builds the app and publishes the zip as a GitHub release.
 
 ## Layout
 
