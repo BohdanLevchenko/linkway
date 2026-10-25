@@ -64,6 +64,11 @@ enum BrowserCatalog {
             privateWindowArgument: "--incognito"
         ),
         KnownBrowser(
+            bundleID: "net.imput.helium", engine: .chromium,
+            profileAdapter: .chromium(userDataPath: "net.imput.helium"), profileAdapterEnabled: true,
+            privateWindowArgument: "--incognito"
+        ),
+        KnownBrowser(
             bundleID: "company.thebrowser.Browser", engine: .chromium,
             profileAdapter: nil, profileAdapterEnabled: false, privateWindowArgument: nil
         ),
@@ -84,6 +89,11 @@ enum BrowserCatalog {
         KnownBrowser(
             bundleID: "org.mozilla.nightly", engine: .gecko,
             profileAdapter: .firefox(supportPath: "Firefox"), profileAdapterEnabled: true,
+            privateWindowArgument: "-private-window"
+        ),
+        KnownBrowser(
+            bundleID: "app.zen-browser.zen", engine: .gecko,
+            profileAdapter: .firefox(supportPath: "zen"), profileAdapterEnabled: true,
             privateWindowArgument: "-private-window"
         ),
     ]
