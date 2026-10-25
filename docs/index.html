@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0b0f1a" media="(prefers-color-scheme: dark)">
 <meta name="theme-color" content="#f6f6f4" media="(prefers-color-scheme: light)">
 <meta property="og:title" content="Linkway">
-<meta property="og:description" content="The right browser. Every time. A link router for the macOS menu bar.">
+<meta property="og:description" content="A macOS menu bar app that opens each link in the browser, profile or app you meant.">
 <meta property="og:image" content="assets/poster.jpg">
 <style>
 :root {
@@ -231,9 +231,9 @@ footer p { margin: 0; }
   <main>
     <div class="hero">
       <h1>Linkway</h1>
-      <p class="pitch">The right browser. Every time.</p>
+      <p class="pitch">Each link opens in the browser, profile or app you meant.</p>
       <p class="sub">A small menu bar app for macOS that decides where your links open. It cleans each link, follows your rules and asks only when it has to.</p>
-      <p class="meta"><a href="https://github.com/bohdanlevchenko/linkway">Source on GitHub</a>Requires macOS 14 or later.</p>
+      <p class="meta"><a href="https://github.com/bohdanlevchenko/linkway/releases/latest">Download</a><a href="https://github.com/bohdanlevchenko/linkway">Source on GitHub</a>Requires macOS 14 or later. The app is not notarized yet, so approve it once in System Settings › Privacy &amp; Security.</p>
     </div>
 
     <div class="reel">
@@ -255,7 +255,7 @@ footer p { margin: 0; }
       <ul class="features">
         <li>
           <h3>Clean links</h3>
-          <p>Removes trackers like <code>utm_*</code>, <code>fbclid</code>, <code>gclid</code> and <code>msclkid</code>, and unwraps redirect links from Google, Facebook and Outlook safe links. Signed and login links are left alone. Short links from bit.ly, t.co and similar can be expanded first, if you turn it on.</p>
+          <p>Removes trackers like <code>utm_*</code>, <code>fbclid</code>, <code>gclid</code> and <code>msclkid</code>, and unwraps redirect links from Google, Facebook and Outlook safe links. Signed and login links are left alone. If you turn it on, Linkway also expands short links from bit.ly, t.co and similar before routing them.</p>
         </li>
         <li>
           <h3>A picker when you need it</h3>
@@ -263,11 +263,11 @@ footer p { margin: 0; }
         </li>
         <li>
           <h3>Rules</h3>
-          <p>Match by host, subdomain, URL prefix, path, sender app or mail domain. Rules run in order and the first match wins, with no prompt. A built-in tester shows which rule matches a URL without opening it. Hold <kbd>⌥</kbd> while clicking a link to see the picker anyway.</p>
+          <p>Match by host, subdomain, URL prefix, path, sender app or mail domain. Rules run in order, and the first match opens the link without asking. A built-in tester shows which rule matches a URL without opening it. Hold <kbd>⌥</kbd> while clicking a link to see the picker anyway.</p>
         </li>
         <li>
           <h3>Profiles</h3>
-          <p>Open links in a specific profile of Chrome, Edge, Brave or Firefox. Profiles are picked up automatically when you add or rename them.</p>
+          <p>Open links in a specific profile of Chrome, Edge, Brave, Helium, Firefox or Zen. Linkway notices when you add or rename a profile.</p>
         </li>
         <li>
           <h3>Private windows</h3>
@@ -289,14 +289,14 @@ footer p { margin: 0; }
 
       <figure>
         <img src="assets/rules.jpg" width="1140" height="610" loading="lazy" decoding="async" alt="A list of rules: github.com opens in the Work Chrome profile, zoom.us meeting links open in Zoom, mail to company.com opens in Gmail, figma.com files open in Figma, news.ycombinator.com opens in Safari and open.spotify.com opens in Spotify.">
-        <figcaption>Rules send each link to its place. The first match wins.</figcaption>
+        <figcaption>Six rules sending sites to a Chrome profile, Safari, Gmail and desktop apps.</figcaption>
       </figure>
     </section>
 
     <section id="url-scheme" aria-labelledby="scheme-title">
       <div class="text">
         <h2 id="scheme-title">The <code>linkway://</code> URL scheme</h2>
-        <p class="lede">Hand a link to Linkway from Terminal, AppleScript, scripts or a web page. Append the link as it is, no encoding needed.</p>
+        <p class="lede">Hand a link to Linkway from Terminal, AppleScript, a script or a web page. Put the link after the action as it is; you do not need to encode it.</p>
       </div>
 <pre><code><span class="c"># Route through your rules, like a normal click</span>
 open "linkway://open/https://example.com/docs"
@@ -308,7 +308,7 @@ open "linkway://prompt/https://example.com/docs"
 open "linkway://open?url=https%3A%2F%2Fexample.com%2Fdocs"</code></pre>
       <ul class="api-notes text">
         <li>Accepts <code>http</code>, <code>https</code> and <code>mailto</code> links only.</li>
-        <li>Choosy compatible: <code>x-choosy://open/</code>, <code>prompt.all/</code>, <code>prompt.running/</code>, <code>best.all/</code> and <code>best.running/</code> work as expected.</li>
+        <li>Choosy commands work too: <code>x-choosy://open/</code>, <code>prompt.all/</code>, <code>prompt.running/</code>, <code>best.all/</code> and <code>best.running/</code>.</li>
       </ul>
     </section>
   </main>
