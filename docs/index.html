@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Linkway: a link router for macOS</title>
+<meta name="description" content="Linkway is a macOS menu bar app that sends every link to the right browser, profile or app. It cleans links, follows your rules and asks only when it has to.">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#0b0f1a" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f6f6f4" media="(prefers-color-scheme: light)">
+<meta property="og:title" content="Linkway">
+<meta property="og:description" content="The right browser. Every time. A link router for the macOS menu bar.">
+<meta property="og:image" content="assets/poster.jpg">
+<style>
+:root {
+  --bg: #0b0f1a;
+  --surface: #131826;
+  --line: #222a3b;
+  --text: #f2f4f8;
+  --muted: #9aa3b5;
+  --faint: #6b7487;
+  --accent: #8fb3ff;
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f6f6f4;
+    --surface: #ffffff;
+    --line: #e2e2de;
+    --text: #15171c;
+    --muted: #555b66;
+    --faint: #757b86;
+    --accent: #2457c5;
+    color-scheme: light;
+  }
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 17px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  overflow-wrap: break-word;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible, video:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+.text { max-width: 680px; }
+
+header.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 22px;
+  padding-bottom: 22px;
+  font-size: 15px;
+}
+header.top .mark { color: var(--text); font-weight: 600; letter-spacing: -0.01em; }
+header.top nav a { color: var(--muted); margin-left: 22px; }
+header.top nav a:hover { color: var(--text); text-decoration: none; }
+
+.hero { padding-top: 56px; padding-bottom: 40px; }
+.hero h1 {
+  margin: 0;
+  font-size: clamp(48px, 9vw, 88px);
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+.hero .pitch {
+  margin: 18px 0 0;
+  font-size: clamp(20px, 2.6vw, 26px);
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.hero .sub {
+  margin: 12px 0 0;
+  color: var(--muted);
+  max-width: 560px;
+}
+.hero .meta {
+  margin: 22px 0 0;
+  font-size: 15px;
+  color: var(--faint);
+}
+.hero .meta a { margin-right: 18px; }
+
+.reel { margin-top: 8px; }
+.reel video {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  background: #0b0f1a;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}
+.reel .bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  margin-top: 12px;
+  font-size: 14px;
+  color: var(--faint);
+}
+.reel button {
+  font: inherit;
+  color: var(--muted);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.reel button:hover { color: var(--text); }
+.js-only { display: none; }
+.has-js .js-only { display: inline-block; }
+
+section { padding-top: 88px; }
+h2 {
+  margin: 0 0 8px;
+  font-size: 28px;
+  line-height: 1.2;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.lede { margin: 0 0 32px; color: var(--muted); }
+
+.features { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.features li {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 4px 32px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--line);
+}
+.features h3 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+.features p { margin: 0; color: var(--muted); }
+code, kbd, pre { font-family: var(--mono); font-size: 0.88em; }
+code { color: var(--text); }
+kbd {
+  font-family: var(--sans);
+  font-size: 0.9em;
+  color: var(--text);
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  white-space: nowrap;
+}
+
+figure { margin: 40px 0 0; }
+figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}
+figcaption { margin-top: 10px; font-size: 14px; color: var(--faint); }
+
+pre {
+  margin: 0;
+  padding: 20px 22px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow-x: auto;
+  line-height: 1.7;
+  font-size: 14.5px;
+  color: var(--text);
+}
+pre .c { color: var(--faint); }
+.api-notes { margin: 20px 0 0; padding-left: 20px; color: var(--muted); }
+.api-notes li { margin: 6px 0; }
+
+footer {
+  margin-top: 112px;
+  padding-top: 28px;
+  padding-bottom: 48px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+  color: var(--faint);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 24px;
+}
+footer p { margin: 0; }
+
+@media (max-width: 720px) {
+  body { font-size: 16px; }
+  .wrap { padding: 0 16px; }
+  .hero { padding-top: 32px; }
+  section { padding-top: 64px; }
+  .features li { grid-template-columns: 1fr; padding: 16px 0; }
+  .reel video, figure img { border-radius: 8px; }
+  pre { padding: 16px; font-size: 13px; }
+  header.top nav a { margin-left: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="mark" href="./">Linkway</a>
+    <nav aria-label="Primary">
+      <a href="#features">Features</a>
+      <a href="#url-scheme">URL scheme</a>
+      <a href="https://github.com/bohdanlevchenko/linkway">GitHub</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="hero">
+      <h1>Linkway</h1>
+      <p class="pitch">The right browser. Every time.</p>
+      <p class="sub">A small menu bar app for macOS that decides where your links open. It cleans each link, follows your rules and asks only when it has to.</p>
+      <p class="meta"><a href="https://github.com/bohdanlevchenko/linkway">Source on GitHub</a>Requires macOS 14 or later.</p>
+    </div>
+
+    <div class="reel">
+      <video id="reel" autoplay muted loop playsinline controls preload="metadata" poster="assets/poster.jpg" aria-label="Linkway showreel: a link is cleaned, opened from the picker, routed by rules and sent straight into desktop apps.">
+        <source src="assets/showreel.mp4" type="video/mp4">
+        <p>Your browser cannot play this video. <a href="assets/showreel.mp4">Open the showreel</a>.</p>
+      </video>
+      <div class="bar">
+        <span>40 second tour.</span>
+        <button type="button" id="sound" class="js-only" aria-pressed="false">Turn sound on</button>
+      </div>
+    </div>
+
+    <section id="features" aria-labelledby="features-title">
+      <div class="text">
+        <h2 id="features-title">What it does</h2>
+        <p class="lede">Set Linkway as your default browser. Every link you click goes through it first.</p>
+      </div>
+      <ul class="features">
+        <li>
+          <h3>Clean links</h3>
+          <p>Removes trackers like <code>utm_*</code>, <code>fbclid</code>, <code>gclid</code> and <code>msclkid</code>, and unwraps redirect links from Google, Facebook and Outlook safe links. Signed and login links are left alone. Short links from bit.ly, t.co and similar can be expanded first, if you turn it on.</p>
+        </li>
+        <li>
+          <h3>A picker when you need it</h3>
+          <p>Choose a browser or a profile from a row of tiles. Press <kbd>⌘1</kbd>, <kbd>⌘2</kbd> and so on to pick from the keyboard. Tick <em>Remember this choice</em> and Linkway makes a rule for that site.</p>
+        </li>
+        <li>
+          <h3>Rules</h3>
+          <p>Match by host, subdomain, URL prefix, path, sender app or mail domain. Rules run in order and the first match wins, with no prompt. A built-in tester shows which rule matches a URL without opening it. Hold <kbd>⌥</kbd> while clicking a link to see the picker anyway.</p>
+        </li>
+        <li>
+          <h3>Profiles</h3>
+          <p>Open links in a specific profile of Chrome, Edge, Brave or Firefox. Profiles are picked up automatically when you add or rename them.</p>
+        </li>
+        <li>
+          <h3>Private windows</h3>
+          <p>Hold <kbd>⇧</kbd> in the picker to open the link in a private window, in browsers that support it.</p>
+        </li>
+        <li>
+          <h3>Straight into the app</h3>
+          <p>Web links for Figma, Linear, Notion, Zoom, Microsoft Teams, Spotify, Discord and Slack open in the desktop app when it is installed.</p>
+        </li>
+        <li>
+          <h3>Mail links</h3>
+          <p>Send <code>mailto:</code> links to a mail app or to webmail: Gmail, Outlook, Yahoo Mail, Fastmail or Proton Mail. Recipients, subject and body come along.</p>
+        </li>
+        <li>
+          <h3>Browser extension</h3>
+          <p>A Chromium extension and a bookmarklet hand the current page or any link to Linkway. The bookmarklet works in Safari too.</p>
+        </li>
+      </ul>
+
+      <figure>
+        <img src="assets/rules.jpg" width="1140" height="610" loading="lazy" decoding="async" alt="A list of rules: github.com opens in the Work Chrome profile, zoom.us meeting links open in Zoom, mail to company.com opens in Gmail, figma.com files open in Figma, news.ycombinator.com opens in Safari and open.spotify.com opens in Spotify.">
+        <figcaption>Rules send each link to its place. The first match wins.</figcaption>
+      </figure>
+    </section>
+
+    <section id="url-scheme" aria-labelledby="scheme-title">
+      <div class="text">
+        <h2 id="scheme-title">The <code>linkway://</code> URL scheme</h2>
+        <p class="lede">Hand a link to Linkway from Terminal, AppleScript, scripts or a web page. Append the link as it is, no encoding needed.</p>
+      </div>
+<pre><code><span class="c"># Route through your rules, like a normal click</span>
+open "linkway://open/https://example.com/docs"
+
+<span class="c"># Always show the picker</span>
+open "linkway://prompt/https://example.com/docs"
+
+<span class="c"># Strict form for callers that encode</span>
+open "linkway://open?url=https%3A%2F%2Fexample.com%2Fdocs"</code></pre>
+      <ul class="api-notes text">
+        <li>Accepts <code>http</code>, <code>https</code> and <code>mailto</code> links only.</li>
+        <li>Choosy compatible: <code>x-choosy://open/</code>, <code>prompt.all/</code>, <code>prompt.running/</code>, <code>best.all/</code> and <code>best.running/</code> work as expected.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    <p>Linkway. A link router for the macOS menu bar.</p>
+    <p>Requires macOS 14 or later. <a href="https://github.com/bohdanlevchenko/linkway">GitHub</a></p>
+  </footer>
+</div>
+<script>
+(function () {
+  var v = document.getElementById('reel');
+  var b = document.getElementById('sound');
+  document.documentElement.className += ' has-js';
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    v.removeAttribute('autoplay');
+    v.pause();
+  }
+  function sync() {
+    var on = !v.muted;
+    b.textContent = on ? 'Turn sound off' : 'Turn sound on';
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+  b.addEventListener('click', function () {
+    v.muted = !v.muted;
+    if (!v.muted && v.paused) v.play();
+    sync();
+  });
+  v.addEventListener('volumechange', sync);
+})();
+</script>
+</body>
+</html>
