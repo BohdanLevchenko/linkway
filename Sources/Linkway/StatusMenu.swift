@@ -89,13 +89,12 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
 
     @objc private func openClipboard() {
-        guard let value = NSPasteboard.general.string(forType: .string),
-              let url = URL(string: value.trimmingCharacters(in: .whitespacesAndNewlines)),
-              url.scheme != nil else {
+        guard let value = NSPasteboard.general.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              URL(string: value)?.scheme != nil else {
             showAlert(title: "No Link on Clipboard", message: "Copy a full URL and try again.")
             return
         }
-        ingress.receive(url)
+        ingress.receive(value)
     }
 
     @objc private func makeDefaultBrowser() {

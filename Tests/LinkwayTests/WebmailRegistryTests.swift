@@ -75,7 +75,7 @@ import Testing
     try JSONEncoder().encode(config).write(to: input)
     try await router.importConfiguration(from: input)
     for action in ["prompt.running", "best.running"] {
-        let command = try SchemeCommand.parse(#require(URL(string: "x-choosy://\(action)/mailto:a@example.com"))).get()
+        let command = try SchemeCommand.parse("x-choosy://\(action)/mailto:a@example.com").get()
         let link = IncomingLink(url: command.link, receivedAt: Date(), senderBundleID: nil, forcePicker: false, mode: command.mode)
         let order = router.pickerDestinations(for: link).map(\.id)
         #expect(order == [gmail.destinationID, mail.id])

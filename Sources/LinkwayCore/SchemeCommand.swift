@@ -29,22 +29,24 @@ public struct SchemeCommand: Sendable, Hashable {
     public let link: URL
     public let mode: Mode
 
+    private static let schemes: Set<String> = ["linkway", "x-choosy"]
+
     public static func handles(_ url: URL) -> Bool {
-        url.scheme?.lowercased() == "linkway" || url.scheme?.lowercased() == "x-choosy"
+        url.scheme.map { schemes.contains($0.lowercased()) } ?? false
     }
 
-    public static func parse(_ url: URL) -> Result<SchemeCommand, SchemeCommandError> {
-        let original = url.absoluteString
-        guard handles(url), let colon = original.firstIndex(of: ":") else {
-            return .failure(.unsupportedCommandScheme)
-        }
+    /// Takes the raw string because the legacy URL parser escapes `#` in opaque forms such as `linkway:open/...`.
+    public static func parse(_ original: String) -> Result<SchemeCommand, SchemeCommandError> {
+        guard let colon = original.firstIndex(of: ":") else { return .failure(.unsupportedCommandScheme) }
+        let commandScheme = original[..<colon].lowercased()
+        guard schemes.contains(commandScheme) else { return .failure(.unsupportedCommandScheme) }
         var command = original[original.index(after: colon)...]
         if command.hasPrefix("//") { command = command.dropFirst(2) }
         else if command.hasPrefix("/") { command = command.dropFirst() }
         let actionEnd = command.firstIndex(where: { $0 == "/" || $0 == "?" || $0 == "#" }) ?? command.endIndex
         let action = String(command[..<actionEnd])
         let mode: Mode
-        switch (url.scheme?.lowercased(), action) {
+        switch (commandScheme, action) {
         case (_, "open"): mode = .route
         case ("linkway", "prompt"), ("x-choosy", "prompt.all"): mode = .prompt(scope: .all)
         case ("x-choosy", "prompt.running"): mode = .prompt(scope: .running)
@@ -57,7 +59,7 @@ public struct SchemeCommand: Sendable, Hashable {
         if remainder.hasPrefix("/") {
             // The payload owns its query and fragment, including any v= item.
             payload = String(remainder.dropFirst())
-        } else if (action == "open" || (url.scheme?.lowercased() == "linkway" && action == "prompt")), remainder.hasPrefix("?") {
+        } else if (action == "open" || (commandScheme == "linkway" && action == "prompt")), remainder.hasPrefix("?") {
             guard let components = URLComponents(string: String(remainder)),
                   components.fragment == nil else { return .failure(.invalidQuery) }
             let items = components.queryItems ?? []

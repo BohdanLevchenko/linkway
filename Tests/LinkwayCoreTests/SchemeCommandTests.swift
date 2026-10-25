@@ -13,8 +13,7 @@ import Testing
 ])
 func schemeActions(scheme: String, action: String, mode: SchemeCommand.Mode) throws {
     for separator in ["://", ":/", ":"] {
-        let url = try #require(URL(string: scheme + separator + action + "/https://example.com/a%2Fb?q=one%26two&v=2#fragment"))
-        let command = try SchemeCommand.parse(url).get()
+        let command = try SchemeCommand.parse(scheme + separator + action + "/https://example.com/a%2Fb?q=one%26two&v=2#fragment").get()
         #expect(command.link.absoluteString == "https://example.com/a%2Fb?q=one%26two&v=2#fragment")
         #expect(command.mode == mode)
     }
@@ -33,20 +32,19 @@ func schemeActions(scheme: String, action: String, mode: SchemeCommand.Mode) thr
 func schemePayloadPreservation(payload: String) throws {
     let expected = try #require(URL(string: payload))
     for scheme in ["linkway", "x-choosy"] {
-        let raw = try #require(URL(string: "\(scheme)://open/" + payload))
-        #expect(try SchemeCommand.parse(raw).get().link.absoluteString == expected.absoluteString)
+        #expect(try SchemeCommand.parse("\(scheme)://open/" + payload).get().link.absoluteString == expected.absoluteString)
         var components = URLComponents()
         components.scheme = scheme
         components.host = "open"
         components.queryItems = [URLQueryItem(name: "url", value: payload), URLQueryItem(name: "v", value: "1")]
         let strict = try #require(components.url)
-        #expect(try SchemeCommand.parse(strict).get().link.absoluteString == expected.absoluteString)
+        #expect(try SchemeCommand.parse(strict.absoluteString).get().link.absoluteString == expected.absoluteString)
     }
 }
 
 @Test(arguments: ["linkway://open/https:/example.com/a?q=1#f", "x-choosy:prompt.running/http:/example.com/a?q=1#f"])
 func normalizesSingleSlash(value: String) throws {
-    let command = try SchemeCommand.parse(#require(URL(string: value))).get()
+    let command = try SchemeCommand.parse(value).get()
     #expect(command.link.absoluteString == (value.contains("https:") ? "https://example.com/a?q=1#f" : "http://example.com/a?q=1#f"))
 }
 
@@ -74,13 +72,12 @@ func normalizesSingleSlash(value: String) throws {
     ("linkway://open?url=x-choosy%3A%2F%2Fopen%2Fhttps%3A%2F%2Fexample.com", .unsupportedLinkScheme),
 ])
 func rejectsSchemeCommand(value: String, error: SchemeCommandError) throws {
-    #expect(SchemeCommand.parse(try #require(URL(string: value))) == .failure(error))
+    #expect(SchemeCommand.parse(value) == .failure(error))
 }
 
 @Test func strictVariantsAndVersion() throws {
     for prefix in ["LINKWAY://open", "linkway:/open", "linkway:open", "x-choosy://open"] {
-        let url = try #require(URL(string: prefix + "?v=1&url=https%3A%2F%2Fexample.com%2Fa%253Fb%3Fq%3D%2526%23f"))
-        #expect(try SchemeCommand.parse(url).get().link.absoluteString == "https://example.com/a%3Fb?q=%26#f")
+        #expect(try SchemeCommand.parse(prefix + "?v=1&url=https%3A%2F%2Fexample.com%2Fa%253Fb%3Fq%3D%2526%23f").get().link.absoluteString == "https://example.com/a%3Fb?q=%26#f")
     }
 }
 
@@ -157,10 +154,9 @@ private func scopedDestination(_ bundleID: String, profile: String? = nil, kind:
     }
 }
 
-@Test func rawUnicodeHostRetainsOriginalEscaping() throws {
-    let url = try #require(URL(string: "linkway://open/https://bücher.de/é?q=✓#片"))
-    let command = try SchemeCommand.parse(url).get()
-    #expect(command.link.absoluteString == "https://b%C3%BCcher.de/%C3%A9?q=%E2%9C%93#%E7%89%87")
+@Test func rawUnicodeLinkMatchesDirectParsing() throws {
+    let command = try SchemeCommand.parse("linkway://open/https://bücher.de/é?q=✓#片").get()
+    #expect(command.link.absoluteString == "https://xn--bcher-kva.de/%C3%A9?q=%E2%9C%93#%E7%89%87")
     let link = IncomingLink(url: command.link, receivedAt: Date(), senderBundleID: nil, forcePicker: false)
     #expect(URLMatcher.matches(.hostExact("xn--bcher-kva.de"), link: link, url: command.link))
 }
@@ -180,12 +176,11 @@ private func scopedDestination(_ bundleID: String, profile: String? = nil, kind:
             ("url=linkway%3A%2F%2Fopen%2Fhttps%3A%2F%2Fexample.com", .unsupportedLinkScheme),
             ("url=https%3A%2F%2F", .invalidLink),
         ] {
-            #expect(SchemeCommand.parse(try #require(URL(string: "linkway://\(action)?\(query)"))) == .failure(error))
+            #expect(SchemeCommand.parse("linkway://\(action)?\(query)") == .failure(error))
         }
         for prefix in ["LINKWAY://", "linkway:/", "linkway:"] {
             for version in ["", "&v=1", "&v=1&v=1"] {
-                let input = try #require(URL(string: prefix + action + "?url=https%3A%2F%2Fexample.com%2Fa%253Fb%3Fq%3D%2526%23f" + version))
-                let command = try SchemeCommand.parse(input).get()
+                let command = try SchemeCommand.parse(prefix + action + "?url=https%3A%2F%2Fexample.com%2Fa%253Fb%3Fq%3D%2526%23f" + version).get()
                 #expect(command.link.absoluteString == "https://example.com/a%3Fb?q=%26#f")
                 #expect(command.mode == (action == "open" ? .route : .prompt(scope: .all)))
             }

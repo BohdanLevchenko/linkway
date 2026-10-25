@@ -28,7 +28,7 @@ func extensionJavaScriptRoundTrip(link: String) throws {
         let result = try #require(builder.call(withArguments: [link, mode])?.toString())
         #expect(context.exception == nil)
         #expect(result.hasPrefix("linkway://\(mode)?url="))
-        let command = try SchemeCommand.parse(#require(URL(string: result))).get()
+        let command = try SchemeCommand.parse(result).get()
         #expect(command.link == URL(string: link))
         #expect(command.link.absoluteString == URL(string: link)?.absoluteString)
         #expect(command.mode == (mode == "open" ? .route : .prompt(scope: .all)))
@@ -62,7 +62,7 @@ func bookmarkletJavaScriptRoundTrip(link: String) throws {
     #expect(result?.isUndefined == true)
     #expect(context.exception == nil)
     let assigned = try #require(context.evaluateScript("location.href")?.toString())
-    let command = try SchemeCommand.parse(#require(URL(string: assigned))).get()
+    let command = try SchemeCommand.parse(assigned).get()
     #expect(command.link.absoluteString == URL(string: link)?.absoluteString)
     #expect(command.mode == .prompt(scope: .all))
 }
@@ -138,8 +138,7 @@ func bookmarkletJavaScriptRoundTrip(link: String) throws {
     for (index, update) in updates.enumerated() {
         #expect(update["id"] as? Int == 42)
         let value = try #require(update["url"] as? String)
-        let url = try #require(URL(string: value))
-        let command = try SchemeCommand.parse(url).get()
+        let command = try SchemeCommand.parse(value).get()
         #expect(command.mode == (index == 4 ? .route : .prompt(scope: .all)))
         #expect(command.link.absoluteString == (index == 3 ? "mailto:a@example.com?subject=Hi%20there" : "https://example.com/?q=1#f"))
     }

@@ -37,23 +37,31 @@ final class LinkIngress: NSObject {
     @objc private func handleGetURL(
         _ event: NSAppleEventDescriptor, withReplyEvent reply: NSAppleEventDescriptor
     ) {
-        guard let value = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue,
-              let url = URL(string: value), url.scheme != nil else {
-            logger.error("Received an invalid URL event")
+        guard let value = event.paramDescriptor(forKeyword: keyDirectObject)?.stringValue else {
+            logger.error("Received a URL event without a URL")
             return
         }
         let senderBundleID = event.attributeDescriptor(forKeyword: keySenderPIDAttr)
             .flatMap { NSRunningApplication(processIdentifier: $0.int32Value)?.bundleIdentifier }
-        receive(url, senderBundleID: senderBundleID)
+        receive(value, senderBundleID: senderBundleID)
     }
 
     func receive(_ url: URL, senderBundleID: String? = nil) {
-        let resolved = resolveWebLocation(url)
+        receive(url.absoluteString, senderBundleID: senderBundleID)
+    }
+
+    /// Prefer this over the URL overload: scheme commands must be parsed from the raw string.
+    func receive(_ value: String, senderBundleID: String? = nil) {
+        let value = resolveWebLocation(value)
+        guard let resolved = URL(string: value), resolved.scheme != nil else {
+            logger.error("Received an invalid URL")
+            return
+        }
         let linkURL: URL
         let mode: SchemeCommand.Mode
         let sender: String?
         if SchemeCommand.handles(resolved) {
-            switch SchemeCommand.parse(resolved) {
+            switch SchemeCommand.parse(value) {
             case .success(let command):
                 linkURL = command.link
                 mode = command.mode
@@ -77,21 +85,20 @@ final class LinkIngress: NSObject {
         drain()
     }
 
-    private func resolveWebLocation(_ url: URL) -> URL {
-        guard url.isFileURL, url.pathExtension.lowercased() == "webloc" else { return url }
+    private func resolveWebLocation(_ value: String) -> String {
+        guard let url = URL(string: value), url.isFileURL, url.pathExtension.lowercased() == "webloc" else { return value }
         do {
             let data = try Data(contentsOf: url)
             let plist = try PropertyListSerialization.propertyList(from: data, format: nil)
             guard let dictionary = plist as? [String: Any],
-                  let value = dictionary["URL"] as? String,
-                  let target = URL(string: value), target.scheme != nil else {
+                  let target = dictionary["URL"] as? String, URL(string: target)?.scheme != nil else {
                 logger.error("Web location has no valid URL; keeping the original file")
-                return url
+                return value
             }
             return target
         } catch {
             logger.error("Cannot read web location: \(error.localizedDescription, privacy: .public)")
-            return url
+            return value
         }
     }
 
