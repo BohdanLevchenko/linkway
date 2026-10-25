@@ -63,6 +63,25 @@ struct GeneralPreferencesView: View {
                     scriptingExample("Swift", code: #"NSWorkspace.shared.open(URL(string: "linkway://open/https://example.com")!)"#)
                 }
             }
+            Section("Browser Extension & Bookmarklet") {
+                Button("Show Extension Folder") {
+                    if let folder = chromiumExtensionFolder {
+                        NSWorkspace.shared.activateFileViewerSelecting([folder])
+                    }
+                }
+                .disabled(chromiumExtensionFolder == nil)
+                if chromiumExtensionFolder == nil {
+                    Text("Extension folder unavailable. Build the app bundle or run from the source checkout.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Text("Open chrome://extensions, enable Developer mode, choose Load unpacked, and select the extension folder.")
+                    .font(.caption).foregroundStyle(.secondary)
+                scriptingExample("Bookmarklet", code: BrowserIntegration.bookmarklet)
+                Text("Create a bookmark and paste this code as its URL.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("Safari supports bookmarklets; the extension is Chromium-only.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Configuration") {
                 HStack {
                     Button("Import…") { model.importFile() }
@@ -79,6 +98,16 @@ struct GeneralPreferencesView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             model.refreshLoginStatus()
             handlerStatusRevision += 1
+        }
+    }
+
+    private var chromiumExtensionFolder: URL? {
+        let bundled = Bundle.main.resourceURL?.appendingPathComponent("ChromiumExtension", isDirectory: true)
+        let checkout = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("Extensions/chromium", isDirectory: true)
+        return [bundled, checkout].compactMap { $0 }.first {
+            FileManager.default.fileExists(atPath: $0.appendingPathComponent("manifest.json").path)
         }
     }
 

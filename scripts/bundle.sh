@@ -24,6 +24,7 @@ rm -rf "$APP_PATH"
 mkdir -p "$APP_PATH/Contents/MacOS" "$APP_PATH/Contents/Resources"
 cp "$BIN_PATH/Linkway" "$APP_PATH/Contents/MacOS/Linkway"
 cp "$ROOT/Resources/Info.plist" "$APP_PATH/Contents/Info.plist"
+cp -R "$ROOT/Extensions/chromium" "$APP_PATH/Contents/Resources/ChromiumExtension"
 codesign --force --sign - "$APP_PATH"
 
 if [[ "$INSTALL" == 1 ]]; then

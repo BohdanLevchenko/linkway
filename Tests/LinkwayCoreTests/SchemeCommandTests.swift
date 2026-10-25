@@ -164,3 +164,31 @@ private func scopedDestination(_ bundleID: String, profile: String? = nil, kind:
     let link = IncomingLink(url: command.link, receivedAt: Date(), senderBundleID: nil, forcePicker: false)
     #expect(URLMatcher.matches(.hostExact("xn--bcher-kva.de"), link: link, url: command.link))
 }
+
+@Test func strictPromptSharesOpenValidationAndVersionRules() throws {
+    for action in ["open", "prompt"] {
+        for (query, error): (String, SchemeCommandError) in [
+            ("url=", .emptyLink),
+            ("url=https%3A%2F%2Fexample.com&v=2", .unsupportedVersion),
+            ("url=https%3A%2F%2Fexample.com&v=", .unsupportedVersion),
+            ("url=https%3A%2F%2Fexample.com&v", .unsupportedVersion),
+            ("url=https%3A%2F%2Fexample.com&v=1&v=2", .unsupportedVersion),
+            ("url=https%3A%2F%2Fexample.com#fragment", .invalidQuery),
+            ("v=1", .invalidQuery),
+            ("url=a&url=b", .invalidQuery),
+            ("url=javascript%3Aalert(1)", .unsupportedLinkScheme),
+            ("url=linkway%3A%2F%2Fopen%2Fhttps%3A%2F%2Fexample.com", .unsupportedLinkScheme),
+            ("url=https%3A%2F%2F", .invalidLink),
+        ] {
+            #expect(SchemeCommand.parse(try #require(URL(string: "linkway://\(action)?\(query)"))) == .failure(error))
+        }
+        for prefix in ["LINKWAY://", "linkway:/", "linkway:"] {
+            for version in ["", "&v=1", "&v=1&v=1"] {
+                let input = try #require(URL(string: prefix + action + "?url=https%3A%2F%2Fexample.com%2Fa%253Fb%3Fq%3D%2526%23f" + version))
+                let command = try SchemeCommand.parse(input).get()
+                #expect(command.link.absoluteString == "https://example.com/a%3Fb?q=%26#f")
+                #expect(command.mode == (action == "open" ? .route : .prompt(scope: .all)))
+            }
+        }
+    }
+}

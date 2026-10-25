@@ -57,7 +57,7 @@ public struct SchemeCommand: Sendable, Hashable {
         if remainder.hasPrefix("/") {
             // The payload owns its query and fragment, including any v= item.
             payload = String(remainder.dropFirst())
-        } else if action == "open", remainder.hasPrefix("?") {
+        } else if (action == "open" || (url.scheme?.lowercased() == "linkway" && action == "prompt")), remainder.hasPrefix("?") {
             guard let components = URLComponents(string: String(remainder)),
                   components.fragment == nil else { return .failure(.invalidQuery) }
             let items = components.queryItems ?? []
